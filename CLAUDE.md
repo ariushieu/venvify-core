@@ -49,19 +49,27 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
 
 ## 4. Cấu trúc & chuẩn code Spring Boot
 
-### Cấu trúc package (layered)
+### Cấu trúc package (package-by-feature)
+Mỗi module nghiệp vụ chứa đủ tầng của nó; phần dùng chung nằm trong `common/`.
 ```
-src/main/java/com/{project}/
-├── controller/   # REST controllers (@RestController) — chỉ điều phối, validate, map DTO
-├── service/      # Business logic (@Service) — toàn bộ logic + quản lý transaction
-├── repository/   # Data access (@Repository) — không business logic
-├── entity/       # JPA entities (@Entity)
-├── dto/          # Request/Response DTOs
-├── mapper/       # DTO <-> Entity mappers (MapStruct)
-├── config/       # @Configuration
-├── exception/    # Custom exceptions + global handler
-└── util/         # Helper
+com.venvify.venvifycore/
+├── common/
+│   ├── entity/      # BaseEntity, SoftDeletableEntity
+│   ├── exception/   # Custom exceptions + @RestControllerAdvice
+│   ├── dto/         # ApiResponse, PagedResponse (wrapper dùng chung)
+│   ├── config/      # @Configuration (JPA auditing...)
+│   └── util/        # Helper (UuidV7...)
+├── user/            # entity/ enums/ repository/ dto/ mapper/ service/ controller/
+├── event/
+├── booking/
+├── wallet/          # wallet, ledger, transaction, escrow (gộp domain tiền)
+├── room/
+├── interaction/     # poll, question, chat
+├── content/         # recording, summary
+├── social/          # follow, review
+└── notification/
 ```
+Trong mỗi module, tầng vẫn tách rõ: `controller → service → repository → entity`, phụ thuộc chỉ hướng vào trong. Enum đặt trong `{module}/enums/`.
 
 ### Dependency Injection
 - **Không dùng `@Autowired`.** Luôn dùng **constructor injection** qua Lombok `@RequiredArgsConstructor`.

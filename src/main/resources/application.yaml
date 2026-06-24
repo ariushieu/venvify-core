@@ -16,17 +16,44 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      # Flyway sở hữu schema; Hibernate chỉ đối chiếu entity ↔ schema, KHÔNG tự sửa.
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
         jdbc:
           time_zone: Asia/Ho_Chi_Minh
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
 
   jackson:
     time-zone: Asia/Ho_Chi_Minh
 
 logging:
   config: classpath:log4j2.xml
+
+---
+# Profile CHẠY MỘT LẦN để export DDL từ entity ra V1__init_schema.sql.
+# Dùng: ./mvnw spring-boot:run -Dspring-boot.run.profiles=schema-gen
+# Sau khi có file V1, không cần profile này nữa.
+spring:
+  config:
+    activate:
+      on-profile: schema-gen
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      jakarta:
+        persistence:
+          schema-generation:
+            scripts:
+              action: create
+              create-source: metadata
+              create-target: src/main/resources/db/migration/V1__init_schema.sql
+  flyway:
+    enabled: false
