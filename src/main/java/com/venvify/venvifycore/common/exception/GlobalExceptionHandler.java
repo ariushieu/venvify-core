@@ -4,9 +4,11 @@ import com.venvify.venvifycore.common.dto.ApiResponse;
 import com.venvify.venvifycore.common.dto.FieldValidationError;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.List;
 
@@ -49,6 +51,18 @@ public class GlobalExceptionHandler {
                 .toList();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.of(HttpStatus.BAD_REQUEST.value(), "Validation failed", fieldErrors));
+    }
+
+    /** Body JSON hỏng hoặc giá trị enum/kiểu không hợp lệ (vd category sai) → 400, không phải 500. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadable(HttpMessageNotReadableException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Malformed or invalid request body");
+    }
+
+    /** Query/path param sai kiểu (vd ?category=KHONG_TON_TAI) → 400. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'");
     }
 
     @ExceptionHandler(Exception.class)

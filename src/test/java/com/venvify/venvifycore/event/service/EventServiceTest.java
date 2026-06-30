@@ -8,6 +8,7 @@ import com.venvify.venvifycore.event.dto.CreateEventRequest;
 import com.venvify.venvifycore.event.dto.EventResponse;
 import com.venvify.venvifycore.event.dto.UpdateEventRequest;
 import com.venvify.venvifycore.event.entity.Event;
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
 import com.venvify.venvifycore.event.mapper.EventMapper;
 import com.venvify.venvifycore.event.repository.EventRepository;
@@ -54,7 +55,7 @@ class EventServiceTest {
 
     private static final String OWNER_PID = "owner-pid";
     private static final EventResponse RESPONSE = new EventResponse(
-            "evt-pid", OWNER_PID, "host", "Title", "title", "desc", "tech",
+            "evt-pid", OWNER_PID, "host", "Title", "title", "desc", EventCategory.TECHNOLOGY,
             null, null, null, 10, 0, 0L, EventStatus.DRAFT, null, null);
 
     private User owner;
@@ -92,7 +93,7 @@ class EventServiceTest {
     @Test
     void create_grantsHostRoleAndPersistsDraft() {
         CreateEventRequest request = new CreateEventRequest(
-                "My Talk", "desc", "tech", null, null, null, 10, 0L);
+                "My Talk", "desc", EventCategory.TECHNOLOGY, null, null, null, 10, 0L);
         Event mapped = new Event();
         when(userRepository.findByPublicId(OWNER_PID)).thenReturn(Optional.of(owner));
         when(eventMapper.toEntity(request)).thenReturn(mapped);
@@ -219,7 +220,7 @@ class EventServiceTest {
         when(eventRepository.save(draft)).thenReturn(draft);
         when(eventMapper.toResponse(draft)).thenReturn(RESPONSE);
         UpdateEventRequest request = new UpdateEventRequest(
-                "New title", "new", "talk", null, null, null, 20, null, null);
+                "New title", "new", EventCategory.EDUCATION, null, null, null, 20, null, null);
 
         EventResponse result = eventService.update(OWNER_PID, "evt-pid", request);
 
@@ -387,11 +388,11 @@ class EventServiceTest {
         Event published = event(EventStatus.PUBLISHED);
         Pageable pageable = PageRequest.of(0, 20);
         when(eventRepository.findByStatusAndCategoryAndDeletedFalse(
-                eq(EventStatus.PUBLISHED), eq("tech"), any(Pageable.class)))
+                eq(EventStatus.PUBLISHED), eq(EventCategory.TECHNOLOGY), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(published)));
         when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
 
-        PagedResponse<EventResponse> result = eventService.listPublished("tech", pageable);
+        PagedResponse<EventResponse> result = eventService.listPublished(EventCategory.TECHNOLOGY, pageable);
 
         assertThat(result.items()).containsExactly(RESPONSE);
     }

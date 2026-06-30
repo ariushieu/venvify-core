@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.event.repository;
 
 import com.venvify.venvifycore.event.entity.Event;
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -22,7 +23,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     Page<Event> findByStatusAndDeletedFalse(EventStatus status, Pageable pageable);
 
-    Page<Event> findByStatusAndCategoryAndDeletedFalse(EventStatus status, String category, Pageable pageable);
+    Page<Event> findByStatusAndCategoryAndDeletedFalse(EventStatus status, EventCategory category, Pageable pageable);
 
     Page<Event> findByHostIdAndDeletedFalse(Long hostId, Pageable pageable);
 

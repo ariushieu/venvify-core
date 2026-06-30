@@ -1,5 +1,6 @@
 package com.venvify.venvifycore.event.dto;
 
+import com.venvify.venvifycore.event.enums.EventCategory;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -20,8 +21,8 @@ public record CreateEventRequest(
 
         String description,
 
-        @Size(max = 50)
-        String category,
+        /** Danh mục theo chủ đề. Tuỳ chọn; giá trị sai sẽ bị từ chối 400 lúc parse. */
+        EventCategory category,
 
         /** Có thể NULL khi DRAFT; bắt buộc khi publish. */
         Instant startTime,

@@ -9,6 +9,7 @@ import com.venvify.venvifycore.event.dto.CreateEventRequest;
 import com.venvify.venvifycore.event.dto.EventResponse;
 import com.venvify.venvifycore.event.dto.UpdateEventRequest;
 import com.venvify.venvifycore.event.entity.Event;
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
 import com.venvify.venvifycore.event.mapper.EventMapper;
 import com.venvify.venvifycore.event.repository.EventRepository;
@@ -133,8 +134,8 @@ public class EventService {
 
     /** Danh sách event PUBLISHED công khai, lọc theo category (tuỳ chọn). */
     @Transactional(readOnly = true)
-    public PagedResponse<EventResponse> listPublished(String category, Pageable pageable) {
-        Page<Event> page = (category == null || category.isBlank())
+    public PagedResponse<EventResponse> listPublished(EventCategory category, Pageable pageable) {
+        Page<Event> page = (category == null)
                 ? eventRepository.findByStatusAndDeletedFalse(EventStatus.PUBLISHED, pageable)
                 : eventRepository.findByStatusAndCategoryAndDeletedFalse(EventStatus.PUBLISHED, category, pageable);
         return PagedResponse.of(page.map(eventMapper::toResponse));

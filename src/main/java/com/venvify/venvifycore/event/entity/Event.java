@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.event.entity;
 
 import com.venvify.venvifycore.common.entity.SoftDeletableEntity;
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
 import com.venvify.venvifycore.user.entity.User;
 import jakarta.persistence.Column;
@@ -48,8 +49,9 @@ public class Event extends SoftDeletableEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "category", length = 50)
-    private String category;
+    private EventCategory category;
 
     /** Giờ dự kiến bắt đầu (D13). NULL khi DRAFT; bắt buộc khi PUBLISH (enforce ở service). */
     @Column(name = "start_time")

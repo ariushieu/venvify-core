@@ -5,6 +5,7 @@ import com.venvify.venvifycore.common.dto.PagedResponse;
 import com.venvify.venvifycore.event.dto.CreateEventRequest;
 import com.venvify.venvifycore.event.dto.EventResponse;
 import com.venvify.venvifycore.event.dto.UpdateEventRequest;
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.service.EventService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -72,7 +73,7 @@ public class EventController {
     /** Công khai: danh sách event PUBLISHED, lọc category tuỳ chọn. */
     @GetMapping
     public ResponseEntity<ApiResponse<PagedResponse<EventResponse>>> list(
-            @RequestParam(required = false) String category,
+            @RequestParam(required = false) EventCategory category,
             Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(eventService.listPublished(category, pageable)));
     }

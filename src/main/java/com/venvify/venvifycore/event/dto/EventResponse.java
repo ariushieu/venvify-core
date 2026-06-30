@@ -1,5 +1,6 @@
 package com.venvify.venvifycore.event.dto;
 
+import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
 
 import java.time.Instant;
@@ -11,7 +12,7 @@ public record EventResponse(
         String title,
         String slug,
         String description,
-        String category,
+        EventCategory category,
         Instant startTime,
         Instant endTime,
         String timezone,
