@@ -2,6 +2,7 @@ package com.venvify.venvifycore.common.exception;
 
 import com.venvify.venvifycore.common.dto.ApiResponse;
 import com.venvify.venvifycore.common.dto.FieldValidationError;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -63,6 +64,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'");
+    }
+
+    /** Sort theo property không tồn tại (vd ?sort=string) → 400, không phải 500. */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidSort(PropertyReferenceException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid sort property: '" + ex.getPropertyName() + "'");
     }
 
     @ExceptionHandler(Exception.class)
