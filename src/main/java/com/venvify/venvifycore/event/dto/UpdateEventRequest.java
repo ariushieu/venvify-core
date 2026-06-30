@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.event.dto;
 
 import com.venvify.venvifycore.event.enums.EventCategory;
+import com.venvify.venvifycore.event.enums.EventTimezone;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -20,8 +21,7 @@ public record UpdateEventRequest(
 
         Instant endTime,
 
-        @Size(max = 40)
-        String timezone,
+        EventTimezone timezone,
 
         @Min(1)
         Integer maxSlots,

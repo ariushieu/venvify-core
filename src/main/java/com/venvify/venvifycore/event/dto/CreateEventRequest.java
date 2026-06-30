@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.event.dto;
 
 import com.venvify.venvifycore.event.enums.EventCategory;
+import com.venvify.venvifycore.event.enums.EventTimezone;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -30,9 +31,8 @@ public record CreateEventRequest(
         /** Có thể NULL khi DRAFT; bắt buộc khi publish. */
         Instant endTime,
 
-        /** Múi giờ IANA (vd Asia/Ho_Chi_Minh). NULL khi DRAFT; bắt buộc khi publish. */
-        @Size(max = 40)
-        String timezone,
+        /** Múi giờ hiển thị, chọn từ danh sách cố định. NULL khi DRAFT; bắt buộc khi publish. */
+        EventTimezone timezone,
 
         @NotNull
         @Min(value = 1, message = "Minimum number of slots is 1")

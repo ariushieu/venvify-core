@@ -24,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.ZoneId;
 
 /**
  * Nghiệp vụ vòng đời Event (plan §2). Ownership-based: chỉ host sở hữu mới sửa/đổi trạng thái.
@@ -42,7 +41,6 @@ public class EventService {
     @Transactional
     public EventResponse create(String userPublicId, CreateEventRequest request) {
         User host = requireUser(userPublicId);
-        requireValidTimezone(request.timezone());
 
         if (host.getRoles().add(Role.HOST)) {
             userRepository.save(host);
@@ -61,7 +59,6 @@ public class EventService {
     @Transactional
     public EventResponse update(String userPublicId, String eventPublicId, UpdateEventRequest request) {
         Event event = requireOwnedEvent(userPublicId, eventPublicId);
-        requireValidTimezone(request.timezone());
 
         if (event.getStatus() != EventStatus.DRAFT && event.getStatus() != EventStatus.PUBLISHED) {
             throw new BadRequestException("Event can no longer be edited");
@@ -91,11 +88,9 @@ public class EventService {
         if (event.getStatus() != EventStatus.DRAFT) {
             throw new BadRequestException("Only draft events can be published");
         }
-        if (event.getStartTime() == null || event.getEndTime() == null
-                || event.getTimezone() == null || event.getTimezone().isBlank()) {
+        if (event.getStartTime() == null || event.getEndTime() == null || event.getTimezone() == null) {
             throw new BadRequestException("Start time, end time and timezone are required to publish");
         }
-        requireValidTimezone(event.getTimezone());
         if (!event.getStartTime().isAfter(Instant.now())) {
             throw new BadRequestException("Start time must be in the future");
         }
@@ -191,13 +186,6 @@ public class EventService {
 
     private boolean isOwner(Event event, String userPublicId) {
         return userPublicId != null && event.getHost().getPublicId().equals(userPublicId);
-    }
-
-    /** Chỉ chấp nhận IANA zone id thật (vd Asia/Ho_Chi_Minh); bỏ qua null (hợp lệ khi DRAFT). */
-    private void requireValidTimezone(String timezone) {
-        if (timezone != null && !ZoneId.getAvailableZoneIds().contains(timezone)) {
-            throw new BadRequestException("Invalid timezone, expected an IANA zone id (e.g. Asia/Ho_Chi_Minh)");
-        }
     }
 
     private boolean isRescheduling(UpdateEventRequest request, Event event) {

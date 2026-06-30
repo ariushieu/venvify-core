@@ -2,6 +2,7 @@ package com.venvify.venvifycore.event.dto;
 
 import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
+import com.venvify.venvifycore.event.enums.EventTimezone;
 
 import java.time.Instant;
 
@@ -15,7 +16,7 @@ public record EventResponse(
         EventCategory category,
         Instant startTime,
         Instant endTime,
-        String timezone,
+        EventTimezone timezone,
         Integer maxSlots,
         Integer claimedSlots,
         Long priceAmount,

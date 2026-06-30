@@ -3,6 +3,7 @@ package com.venvify.venvifycore.event.entity;
 import com.venvify.venvifycore.common.entity.SoftDeletableEntity;
 import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
+import com.venvify.venvifycore.event.enums.EventTimezone;
 import com.venvify.venvifycore.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -65,9 +66,10 @@ public class Event extends SoftDeletableEntity {
     @Column(name = "original_start_time")
     private Instant originalStartTime;
 
-    /** Múi giờ hiển thị của event (IANA, vd Asia/Ho_Chi_Minh). Lưu UTC, render theo tz này. */
+    /** Múi giờ hiển thị (D13). Lưu tên enum; render giờ treo tường theo {@code zoneId} của nó. */
+    @Enumerated(EnumType.STRING)
     @Column(name = "timezone", length = 40)
-    private String timezone;
+    private EventTimezone timezone;
 
     @Column(name = "max_slots", nullable = false)
     private Integer maxSlots;
