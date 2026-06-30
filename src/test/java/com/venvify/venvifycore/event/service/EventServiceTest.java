@@ -155,6 +155,31 @@ class EventServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    @Test
+    void create_invalidTimezone_throwsBadRequest() {
+        CreateEventRequest request = new CreateEventRequest(
+                "Talk", null, null, null, null, "Mars/Phobos", 5, 0L);
+        when(userRepository.findByPublicId(OWNER_PID)).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> eventService.create(OWNER_PID, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("timezone");
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void create_validTimezone_passesValidation() {
+        CreateEventRequest request = new CreateEventRequest(
+                "Talk", null, null, null, null, "Asia/Ho_Chi_Minh", 5, 0L);
+        Event mapped = new Event();
+        when(userRepository.findByPublicId(OWNER_PID)).thenReturn(Optional.of(owner));
+        when(eventMapper.toEntity(request)).thenReturn(mapped);
+        when(eventRepository.save(mapped)).thenReturn(mapped);
+        when(eventMapper.toResponse(mapped)).thenReturn(RESPONSE);
+
+        assertThat(eventService.create(OWNER_PID, request)).isSameAs(RESPONSE);
+    }
+
     // ---- update ----
 
     @Test
@@ -229,6 +254,18 @@ class EventServiceTest {
         verify(eventRepository).save(draft);
     }
 
+    @Test
+    void update_invalidTimezone_throwsBadRequest() {
+        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(event(EventStatus.DRAFT)));
+        UpdateEventRequest request = new UpdateEventRequest(
+                null, null, null, null, null, "Mars/Phobos", null, null, null);
+
+        assertThatThrownBy(() -> eventService.update(OWNER_PID, "evt-pid", request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("timezone");
+        verify(eventRepository, never()).save(any());
+    }
+
     // ---- publish ----
 
     @Test
@@ -286,6 +323,20 @@ class EventServiceTest {
         eventService.publish(OWNER_PID, "evt-pid");
 
         assertThat(draft.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+    }
+
+    @Test
+    void publish_invalidTimezone_throwsBadRequest() {
+        Event draft = event(EventStatus.DRAFT);
+        draft.setStartTime(Instant.now().plus(1, ChronoUnit.DAYS));
+        draft.setEndTime(Instant.now().plus(1, ChronoUnit.DAYS).plus(2, ChronoUnit.HOURS));
+        draft.setTimezone("Mars/Phobos");
+        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> eventService.publish(OWNER_PID, "evt-pid"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("timezone");
+        assertThat(draft.getStatus()).isEqualTo(EventStatus.DRAFT);
     }
 
     // ---- cancel / delete ----
