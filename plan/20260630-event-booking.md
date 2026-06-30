@@ -1,6 +1,6 @@
 # Plan: Slice Event + Booking (CRUD + đặt vé event FREE)
 
-**Ngày tạo:** 2026-06-30 · **Trạng thái:** ⏳ CHỜ DUYỆT · **Người duyệt:** chủ dự án
+**Ngày tạo:** 2026-06-30 · **Trạng thái:** ✅ ĐÃ DUYỆT (2026-06-30) — đang implement · **Người duyệt:** chủ dự án
 **Liên quan:** [`20260630-ticket-transfer-and-payment.md`](./20260630-ticket-transfer-and-payment.md) §3.1/§7, ERD D4 (slot counter), D13 (event time), CLAUDE.md §3–§8
 
 > ⚠️ Bản thiết kế để duyệt, CHƯA sinh code. Duyệt + chốt §6 `OPEN` xong mình mới code.
@@ -86,10 +86,13 @@ booking/controller/BookingController.java
 - **B5:** Sửa event PUBLISHED không được giảm `maxSlots` dưới `claimedSlots`, không đổi giá.
 - **B6:** Mọi GET collection đều `Pageable` (CLAUDE.md §4).
 
-## 6. OPEN — cần bạn chốt
-- **EO1 — Quyền tạo event (E1):** auto-grant HOST cho mọi user khi tạo event? (Khuyến nghị: **có**, gate ở payout.) Hay bắt buộc nâng cấp HOST trước?
-- **EO2 — Đặt vé event FREE đã đủ cho slice này?** Hay bạn muốn gộp luôn nhánh **trả phí qua ví** (kéo theo `WalletService` double-entry + top-up tạm) vào slice này luôn?
-- **EO3 — Reschedule/POSTPONE** (set `original_start_time`): làm trong slice này hay để sau?
+## 6. Quyết định OPEN (ĐÃ CHỐT 2026-06-30)
+- **EO1 → A:** auto-grant HOST cho mọi user khi tạo event; kiểm soát tiền dồn về bước **payout**, không gate ở tạo event. Ownership-based (không gác endpoint bằng role HOST).
+- **EO2 → Chỉ FREE:** slice này chỉ đặt vé event free. Nhánh **trả phí qua ví** + `WalletService` double-entry + top-up → slice kế.
+- **EO3 → Để sau:** reschedule/POSTPONE (`original_start_time`) KHÔNG làm trong slice này.
+
+### Roadmap (ghi nhận — làm sau, KHÔNG trong slice này)
+- **Host verification ("tích xanh"):** lớp tín nhiệm RIÊNG, độc lập với EO1 (ai cũng tạo event được; chỉ host uy tín có tích). Slice riêng, làm sau khi có **admin endpoints**. Thêm `verification_status` (NONE/PENDING/VERIFIED/REJECTED) + `verification_type` (INDIVIDUAL/ORGANIZATION) + `verified_at` + `reviewed_by` trên `users` (hoặc bảng `host_verification_requests` lưu hồ sơ + audit). Luồng: host nộp hồ sơ → PENDING → ADMIN duyệt → VERIFIED/REJECTED; FE hiện tích cạnh tên host. Đặc quyền (featured / commission thấp / payout cap cao) tính sau. Cần migration riêng.
 
 ## 7. Sau khi duyệt
 Code 1 lượt: Event (service+controller+slug util+DTO) → Booking (service+controller). Không migration. Xong báo file đã đổi; bạn run thử qua Swagger (tạo→publish→đặt vé FREE→huỷ) rồi commit.
