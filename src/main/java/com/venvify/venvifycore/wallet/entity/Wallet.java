@@ -2,8 +2,11 @@ package com.venvify.venvifycore.wallet.entity;
 
 import com.venvify.venvifycore.common.entity.BaseEntity;
 import com.venvify.venvifycore.user.entity.User;
+import com.venvify.venvifycore.wallet.enums.WalletAccountType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
@@ -27,8 +30,18 @@ import lombok.Setter;
 @Builder
 public class Wallet extends BaseEntity {
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    /**
+     * Loại tài khoản trong sổ kép (double-entry, D12). {@code USER} = ví user thật; các giá trị
+     * còn lại là hũ hệ thống (ESCROW/COMMISSION/BANK_CLEARING/SUSPENSE) với {@link #user} = null.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_type", nullable = false, length = 20)
+    @Builder.Default
+    private WalletAccountType accountType = WalletAccountType.USER;
+
+    /** Chủ ví. NULL với hũ hệ thống. UNIQUE(user_id) vẫn đúng vì MySQL coi nhiều NULL là khác nhau. */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
 
     @Column(name = "currency", nullable = false, length = 3)

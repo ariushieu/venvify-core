@@ -51,11 +51,21 @@ public class Event extends SoftDeletableEntity {
     @Column(name = "category", length = 50)
     private String category;
 
-    @Column(name = "start_time", nullable = false)
+    /** Giờ dự kiến bắt đầu (D13). NULL khi DRAFT; bắt buộc khi PUBLISH (enforce ở service). */
+    @Column(name = "start_time")
     private Instant startTime;
 
-    @Column(name = "end_time", nullable = false)
+    /** Giờ dự kiến kết thúc, ước lượng (D13). Giờ thực tế lấy từ rooms.started_at/ended_at. */
+    @Column(name = "end_time")
     private Instant endTime;
+
+    /** Lịch gốc trước khi POSTPONE (D13). Set khi dời lịch lần đầu để FE hiện "dời từ X sang Y". */
+    @Column(name = "original_start_time")
+    private Instant originalStartTime;
+
+    /** Múi giờ hiển thị của event (IANA, vd Asia/Ho_Chi_Minh). Lưu UTC, render theo tz này. */
+    @Column(name = "timezone", length = 40)
+    private String timezone;
 
     @Column(name = "max_slots", nullable = false)
     private Integer maxSlots;
