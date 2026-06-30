@@ -92,7 +92,7 @@ class EventServiceTest {
     // ---- create ----
 
     @Test
-    void create_grantsHostRoleAndPersistsDraft() {
+    void create_persistsDraftWithoutGrantingHost() {
         CreateEventRequest request = new CreateEventRequest(
                 "My Talk", "desc", EventCategory.TECHNOLOGY, null, null, null, 10, 0L);
         Event mapped = new Event();
@@ -104,28 +104,12 @@ class EventServiceTest {
         EventResponse result = eventService.create(OWNER_PID, request);
 
         assertThat(result).isSameAs(RESPONSE);
-        assertThat(owner.getRoles()).contains(Role.HOST);
-        verify(userRepository).save(owner);
+        assertThat(owner.getRoles()).doesNotContain(Role.HOST);
+        verify(userRepository, never()).save(any());
         assertThat(mapped.getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(mapped.getHost()).isSameAs(owner);
         assertThat(mapped.getClaimedSlots()).isZero();
         assertThat(mapped.getSlug()).isEqualTo("my-talk");
-    }
-
-    @Test
-    void create_doesNotResaveUserWhenAlreadyHost() {
-        owner.getRoles().add(Role.HOST);
-        CreateEventRequest request = new CreateEventRequest(
-                "Talk", null, null, null, null, null, 5, 0L);
-        Event mapped = new Event();
-        when(userRepository.findByPublicId(OWNER_PID)).thenReturn(Optional.of(owner));
-        when(eventMapper.toEntity(request)).thenReturn(mapped);
-        when(eventRepository.save(mapped)).thenReturn(mapped);
-        when(eventMapper.toResponse(mapped)).thenReturn(RESPONSE);
-
-        eventService.create(OWNER_PID, request);
-
-        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -288,7 +272,7 @@ class EventServiceTest {
     }
 
     @Test
-    void publish_valid_setsPublished() {
+    void publish_valid_grantsHostAndSetsPublished() {
         Event draft = event(EventStatus.DRAFT);
         draft.setStartTime(Instant.now().plus(1, ChronoUnit.DAYS));
         draft.setEndTime(Instant.now().plus(1, ChronoUnit.DAYS).plus(2, ChronoUnit.HOURS));
@@ -300,6 +284,24 @@ class EventServiceTest {
         eventService.publish(OWNER_PID, "evt-pid");
 
         assertThat(draft.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+        assertThat(owner.getRoles()).contains(Role.HOST);
+        verify(userRepository).save(owner);
+    }
+
+    @Test
+    void publish_doesNotResaveUserWhenAlreadyHost() {
+        owner.getRoles().add(Role.HOST);
+        Event draft = event(EventStatus.DRAFT);
+        draft.setStartTime(Instant.now().plus(1, ChronoUnit.DAYS));
+        draft.setEndTime(Instant.now().plus(1, ChronoUnit.DAYS).plus(2, ChronoUnit.HOURS));
+        draft.setTimezone(EventTimezone.VIETNAM);
+        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(draft));
+        when(eventRepository.save(draft)).thenReturn(draft);
+        when(eventMapper.toResponse(draft)).thenReturn(RESPONSE);
+
+        eventService.publish(OWNER_PID, "evt-pid");
+
+        verify(userRepository, never()).save(any());
     }
 
     // ---- cancel / delete ----

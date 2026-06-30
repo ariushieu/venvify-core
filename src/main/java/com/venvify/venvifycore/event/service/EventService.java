@@ -27,7 +27,7 @@ import java.time.Instant;
 
 /**
  * Nghiệp vụ vòng đời Event (plan §2). Ownership-based: chỉ host sở hữu mới sửa/đổi trạng thái.
- * Tạo event tự cấp role HOST (plan §1 E1); cổng KYC nằm ở bước payout, không chặn ở đây.
+ * Role HOST được cấp khi publish lần đầu (draft chỉ là nháp riêng tư); cổng KYC ở bước payout.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,14 +37,10 @@ public class EventService {
     private final EventMapper eventMapper;
     private final UserRepository userRepository;
 
-    /** Tạo event DRAFT, tự cấp HOST nếu user chưa có (plan §1 E1, E4). */
+    /** Tạo event DRAFT. Chưa cấp HOST ở đây — role được cấp khi publish lần đầu (plan §1 E1, E4). */
     @Transactional
     public EventResponse create(String userPublicId, CreateEventRequest request) {
         User host = requireUser(userPublicId);
-
-        if (host.getRoles().add(Role.HOST)) {
-            userRepository.save(host);
-        }
 
         Event event = eventMapper.toEntity(request);
         event.setHost(host);
@@ -80,7 +76,7 @@ public class EventService {
         return eventMapper.toResponse(eventRepository.save(event));
     }
 
-    /** DRAFT → PUBLISHED, bắt buộc đủ thời gian + timezone hợp lệ (plan §5 B2). */
+    /** DRAFT → PUBLISHED, bắt buộc đủ thời gian + timezone (plan §5 B2); cấp HOST cho chủ event. */
     @Transactional
     public EventResponse publish(String userPublicId, String eventPublicId) {
         Event event = requireOwnedEvent(userPublicId, eventPublicId);
@@ -102,6 +98,12 @@ public class EventService {
         }
 
         event.setStatus(EventStatus.PUBLISHED);
+
+        User host = event.getHost();
+        if (host.getRoles().add(Role.HOST)) {
+            userRepository.save(host);
+        }
+
         return eventMapper.toResponse(eventRepository.save(event));
     }
 
