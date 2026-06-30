@@ -36,6 +36,23 @@ spring:
 logging:
   config: classpath:log4j2.xml
 
+# Auth (JWT HS256 khóa chia sẻ — SPEC §5.2). Secret bắt buộc từ env, KHÔNG hard-code.
+jwt:
+  secret: ${SECRET_KEY}
+  access-token-expiration: 900000      # 15 phút (ms)
+  refresh-token-expiration: 604800000  # 7 ngày (ms)
+
+# Gửi email qua Resend.
+resend:
+  api-key: ${RESEND_API_KEY}
+
+app:
+  # Base URL dùng để dựng link xác thực email (đã gồm context-path /api/v1).
+  base-url: ${APP_BASE_URL:http://localhost:8080/api/v1}
+  mail:
+    from: ${RESEND_FROM_EMAIL:onboarding@resend.dev}
+    verification-token-expiration: 86400000  # 24 giờ (ms)
+
 ---
 # Profile CHẠY MỘT LẦN để export DDL từ entity ra V1__init_schema.sql.
 # Dùng: ./mvnw spring-boot:run -Dspring-boot.run.profiles=schema-gen

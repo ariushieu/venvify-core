@@ -3,6 +3,7 @@ package com.venvify.venvifycore.common.config;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.Components;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +26,8 @@ public class OpenApiConfig {
                         .description("Online Event Platform — REST API")
                         .version("v1")
                         .contact(new Contact().name("Venvify")))
+                // Gắn yêu cầu bảo mật global → Swagger UI mới đính token vào MỌI request.
+                .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
