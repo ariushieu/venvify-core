@@ -22,6 +22,8 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     Page<Event> findByStatusAndDeletedFalse(EventStatus status, Pageable pageable);
 
+    Page<Event> findByStatusAndCategoryAndDeletedFalse(EventStatus status, String category, Pageable pageable);
+
     Page<Event> findByHostIdAndDeletedFalse(Long hostId, Pageable pageable);
 
     /** Khóa row event để cập nhật claimed_slots an toàn khi nhiều người claim đồng thời (D4). */

@@ -14,6 +14,7 @@ public record EventResponse(
         String category,
         Instant startTime,
         Instant endTime,
+        String timezone,
         Integer maxSlots,
         Integer claimedSlots,
         Long priceAmount,

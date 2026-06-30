@@ -1,0 +1,95 @@
+package com.venvify.venvifycore.event.controller;
+
+import com.venvify.venvifycore.common.dto.ApiResponse;
+import com.venvify.venvifycore.common.dto.PagedResponse;
+import com.venvify.venvifycore.event.dto.CreateEventRequest;
+import com.venvify.venvifycore.event.dto.EventResponse;
+import com.venvify.venvifycore.event.dto.UpdateEventRequest;
+import com.venvify.venvifycore.event.service.EventService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/events")
+@RequiredArgsConstructor
+public class EventController {
+
+    private final EventService eventService;
+
+    @PostMapping
+    public ResponseEntity<ApiResponse<EventResponse>> create(
+            @AuthenticationPrincipal String publicId,
+            @Valid @RequestBody CreateEventRequest request) {
+        EventResponse event = eventService.create(publicId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.of(HttpStatus.CREATED.value(), "Event created", event));
+    }
+
+    @PutMapping("/{publicId}")
+    public ResponseEntity<ApiResponse<EventResponse>> update(
+            @AuthenticationPrincipal String userPublicId,
+            @PathVariable String publicId,
+            @Valid @RequestBody UpdateEventRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.update(userPublicId, publicId, request)));
+    }
+
+    @PatchMapping("/{publicId}/publish")
+    public ResponseEntity<ApiResponse<EventResponse>> publish(
+            @AuthenticationPrincipal String userPublicId,
+            @PathVariable String publicId) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.publish(userPublicId, publicId), "Event published"));
+    }
+
+    @PatchMapping("/{publicId}/cancel")
+    public ResponseEntity<ApiResponse<EventResponse>> cancel(
+            @AuthenticationPrincipal String userPublicId,
+            @PathVariable String publicId) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.cancel(userPublicId, publicId), "Event cancelled"));
+    }
+
+    @DeleteMapping("/{publicId}")
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @AuthenticationPrincipal String userPublicId,
+            @PathVariable String publicId) {
+        eventService.delete(userPublicId, publicId);
+        return ResponseEntity.ok(ApiResponse.<Void>ok(null, "Event deleted"));
+    }
+
+    /** Công khai: danh sách event PUBLISHED, lọc category tuỳ chọn. */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PagedResponse<EventResponse>>> list(
+            @RequestParam(required = false) String category,
+            Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.listPublished(category, pageable)));
+    }
+
+    /** Event của host đang đăng nhập (mọi trạng thái). */
+    @GetMapping("/mine")
+    public ResponseEntity<ApiResponse<PagedResponse<EventResponse>>> mine(
+            @AuthenticationPrincipal String userPublicId,
+            Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.listMine(userPublicId, pageable)));
+    }
+
+    /** Công khai: chi tiết event. DRAFT chỉ chủ sở hữu xem được. */
+    @GetMapping("/{publicId}")
+    public ResponseEntity<ApiResponse<EventResponse>> detail(
+            @AuthenticationPrincipal String userPublicId,
+            @PathVariable String publicId) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.getDetail(userPublicId, publicId)));
+    }
+}

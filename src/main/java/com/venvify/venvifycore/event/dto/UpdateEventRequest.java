@@ -20,6 +20,9 @@ public record UpdateEventRequest(
 
         Instant endTime,
 
+        @Size(max = 40)
+        String timezone,
+
         @Min(1)
         Integer maxSlots,
 

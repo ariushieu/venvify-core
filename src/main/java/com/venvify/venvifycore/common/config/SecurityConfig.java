@@ -7,6 +7,7 @@ import com.venvify.venvifycore.common.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -46,6 +47,10 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        // Khách vãng lai duyệt event công khai. /events/mine phải đặt TRƯỚC vì
+                        // pattern /events/* cũng khớp "mine" — matcher xét theo thứ tự, khớp đầu thắng.
+                        .requestMatchers(HttpMethod.GET, "/events/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/events", "/events/*").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
