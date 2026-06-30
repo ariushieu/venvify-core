@@ -49,6 +49,9 @@ resend:
 app:
   # Base URL dùng để dựng link xác thực email (đã gồm context-path /api/v1).
   base-url: ${APP_BASE_URL:http://localhost:8080/api/v1}
+  cors:
+    # CSV origin FE được phép gọi API. Override bằng env APP_CORS_ALLOWED_ORIGINS ở prod.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   mail:
     from: ${RESEND_FROM_EMAIL:onboarding@resend.dev}
     verification-token-expiration: 86400000  # 24 giờ (ms)
