@@ -8,7 +8,8 @@ spring:
     name: venvify-core
 
   datasource:
-    url: jdbc:mysql://localhost:3306/venvify_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    # Prod (Docker) set SPRING_DATASOURCE_URL trỏ host `mysql`; dev mặc định localhost.
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/venvify_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -55,6 +56,19 @@ app:
   mail:
     from: ${RESEND_FROM_EMAIL:onboarding@resend.dev}
     verification-token-expiration: 86400000  # 24 giờ (ms)
+
+---
+# Profile PROD (Docker/VPS): tắt log SQL cho gọn log & đỡ tốn I/O.
+# Mọi secret/URL còn lại đã đọc từ env (SPRING_DATASOURCE_URL, SECRET_KEY, ...) — set trong .env của compose.
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
 
 ---
 # Profile CHẠY MỘT LẦN để export DDL từ entity ra V1__init_schema.sql.
