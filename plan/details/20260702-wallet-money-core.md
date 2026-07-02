@@ -1,7 +1,7 @@
 # Plan: Money-core — sổ kép, mua vé bằng ví, refund/release escrow
 
 **Ngày tạo:** 2026-07-02 · **Trạng thái:** ✅ ĐÃ DUYỆT (O-M1..O-M4 chốt 2026-07-02) · **Người duyệt:** chủ dự án
-**Liên quan:** [`20260630-ticket-transfer-and-payment.md`](./20260630-ticket-transfer-and-payment.md) (D11/D12, luồng §3.1), [`20260624-erd-entity-design.md`](./20260624-erd-entity-design.md) (D2), CLAUDE.md §5 ("không sai một xu")
+**Liên quan:** [`20260630-ticket-transfer-and-payment.md`](./20260630-ticket-transfer-and-payment.md) (D11/D12, luồng §3.1), [`20260624-erd-entity-design.md`](../master/20260624-erd-entity-design.md) (D2), CLAUDE.md §5 ("không sai một xu")
 
 > ⚠️ Slice TIỀN — các `O-M*` ở §10 đã chốt 2026-07-02, plan sẵn sàng implement theo thứ tự §11. Bao gồm cả các fix từ đợt review entity 2026-07-02.
 

@@ -1,7 +1,7 @@
 # Plan: Chuyển nhượng vé (transfer) & Thanh toán Sepay
 
 **Ngày tạo:** 2026-06-30 · **Trạng thái:** ⏳ CHỜ DUYỆT · **Người duyệt:** chủ dự án
-**Liên quan:** [`20260624-erd-entity-design.md`](./20260624-erd-entity-design.md) (ERD gốc), `SPEC.md` §5.6 (phần tiền)
+**Liên quan:** [`20260624-erd-entity-design.md`](../master/20260624-erd-entity-design.md) (ERD gốc), `SPEC.md` §5.6 (phần tiền)
 
 > ⚠️ Bản thiết kế **bổ sung** vào schema đã có, CHƯA sinh code. Duyệt + chốt các `OPEN:` ở §6 xong mình mới tạo entity + migration `V2`.
 

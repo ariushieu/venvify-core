@@ -31,7 +31,9 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
 
 ## 2. File Plan
 
-- **Vị trí:** mọi file plan/phân tích/thiết kế lưu trong `/plan` ở gốc dự án. Không dùng `.claude/plans` hay thư mục ẩn.
+- **Vị trí:** mọi file plan/phân tích/thiết kế lưu trong `/plan` ở gốc dự án. Không dùng `.claude/plans` hay thư mục ẩn. Chia 2 folder con:
+  - `/plan/master` — tài liệu tầm hệ thống, viết 1 lần dùng lâu dài: ERD toàn cục, master roadmap (module nào, thứ tự, ranh giới MVP, quyết định xuyên suốt).
+  - `/plan/details` — plan chi tiết per-slice (service design, DDL, rule, test), viết just-in-time ngay trước khi code slice đó.
 - **Đặt tên:** `YYYYMMDD-[ten-tinh-nang].md` (vd `20260331-user-authentication.md`).
 - **Quy trình** trước khi làm feature lớn: (1) tạo file plan trong `/plan` → (2) chờ user duyệt → (3) chỉ implement sau khi được duyệt.
 
