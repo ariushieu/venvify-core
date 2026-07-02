@@ -199,3 +199,4 @@ Toàn bộ nằm ở bảng §3.2 (O-MP1..O-MP7) — mỗi cái đã có khuyế
 | Ngày | Thay đổi |
 |---|---|
 | 2026-07-02 | Tạo bản đầu. P0 done, P1 (money-core) plan đã duyệt, sẵn sàng implement |
+| 2026-07-02 | Bộ plan kỹ thuật toàn hệ thống (backend-only, FE tách phạm vi): `master/20260702-technical-architecture.md` + `details/20260702-p2..p6-*.md`. Amend §5: đường QR quay lại "mọi luồng qua ví" nhờ thiết kế topup-first (plan P2 §2.5) — không cần ngoại lệ QR-thẳng-escrow nữa |
