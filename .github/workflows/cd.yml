@@ -31,10 +31,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: ci_root
+          # DB CI phù du (sống vài phút trên runner, localhost-only) → không cần password.
+          # Tránh đặt literal password trong repo để secret scanner khỏi báo động giả.
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
           MYSQL_DATABASE: venvify_db
-          MYSQL_USER: venvify
-          MYSQL_PASSWORD: ci_password
         ports:
           - 3306:3306
         options: >-
@@ -56,11 +56,11 @@ jobs:
 
       - name: Build and test
         env:
-          MYSQL_USER: venvify
-          MYSQL_PASSWORD: ci_password
-          SECRET_KEY: ci-only-jwt-secret-key-needs-at-least-32-bytes-0123456789abcdef
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ""
           RESEND_API_KEY: re_ci_dummy_key
         run: |
+          export SECRET_KEY=$(openssl rand -hex 32)
           chmod +x mvnw
           ./mvnw -B verify
 
