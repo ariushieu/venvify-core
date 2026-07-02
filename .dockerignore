@@ -1,0 +1,21 @@
+# Build context chỉ cần pom.xml + src (multi-stage build tự compile).
+.git
+.idea
+.vscode
+.mvn
+mvnw
+mvnw.cmd
+target
+logs
+docker
+deploy
+plan
+docs
+*.md
+.env
+.env.*
+.gitignore
+.gitattributes
+.claudeignore
+docker-compose.yml
+.github
