@@ -4,6 +4,8 @@
 **Liên quan:** [`20260630-ticket-transfer-and-payment.md`](./20260630-ticket-transfer-and-payment.md) (D11/D12, luồng §3.1), [`20260624-erd-entity-design.md`](../master/20260624-erd-entity-design.md) (D2), CLAUDE.md §5 ("không sai một xu")
 
 > ⚠️ Slice TIỀN — các `O-M*` ở §10 đã chốt 2026-07-02, plan sẵn sàng implement theo thứ tự §11. Bao gồm cả các fix từ đợt review entity 2026-07-02.
+>
+> **Amend 2026-07-02 (review chéo, user đã chốt):** (1) V4 convert MỌI cột enum native → VARCHAR(30) — thay cách làm F3, xem §6; (2) reconcile lệch = P0, email admin NGAY — §4; (3) T6 chống brute-force login làm cùng đợt P1 (master §15).
 
 ---
 
@@ -23,7 +25,7 @@
 - **Sepay** (payment intent, VietQR, webhook, hũ SUSPENSE hoạt động thật) — slice kế tiếp.
 - **Payout host rút tiền ra bank** (PAYOUT là chuyển khoản tay + admin đánh dấu) — sau Sepay.
 - **Ticket transfer** (đã có plan riêng, chờ O1–O3).
-- Enum `SEPAY`, `TICKET_RESALE` — thêm trong migration của slice tương ứng (kỷ luật: chỉ ALTER khi slice cần).
+- Enum `SEPAY`, `TICKET_RESALE` — thêm hằng Java ở slice tương ứng (sau V4 không cần migration cho giá trị enum — cột VARCHAR, master §6).
 
 ---
 
@@ -33,7 +35,7 @@
 |---|---|---|---|
 | F1 | Append-only chỉ là Javadoc; `LedgerEntry` có `@Setter`, không gì chặn UPDATE/DELETE | `@org.hibernate.annotations.Immutable` + bỏ `@Setter` (giữ `@Builder`); 2 trigger MySQL `BEFORE UPDATE`/`BEFORE DELETE` → `SIGNAL 45000` | JPA + DB |
 | F2 | Thiếu CHECK constraint MySQL 8 | `ledger.amount <> 0`; `txn.amount > 0`; `escrow: gross = commission + host_net AND commission >= 0 AND host_net >= 0` | DB |
-| F3 | `TransactionType` thiếu loại cho bút toán đảo | += `REVERSAL` (ALTER native enum, xếp alphabet) | DB + enum |
+| F3 | `TransactionType` thiếu loại cho bút toán đảo | += `REVERSAL`; đồng thời V4 **convert MỌI cột enum native → VARCHAR(30)** (quyết 2026-07-02, master §6) — từ đó thêm giá trị enum không cần DDL nữa | DB + enum |
 | F4 | Thiếu mốc thời gian audit | `transactions.completed_at`; `escrow_holds.refunded_at`, `paid_out_at` | DB + entity |
 | F5 | Sao kê sort `created_at` → tie trong cùng micro giây | Sort theo `id` (đơn điệu vì insert dưới lock ví) | Repo |
 | F6 | `findByBookingId` trả `Optional` nổ khi booking refund-rồi-mua-lại | `findByBookingIdAndStatus(bookingId, HELD)`; service đảm bảo ≤ 1 hold HELD/booking (dưới khóa) | Repo + service |
@@ -126,7 +128,7 @@ Chạy trong transaction của thao tác hủy event (số lượng attendee MVP
 3. Mỗi transaction: `SUM(ledger theo txn) = 0`.
 4. Số dư hũ ESCROW `== SUM(gross_amount các hold HELD)`.
 
-Lệch → log **ERROR** kèm chi tiết (wallet/txn id, expected vs actual). MVP dừng ở log; alert (email/Slack) để sau. Repo bổ sung 2 query gộp (per-wallet, per-txn) để job không N+1.
+Lệch = **sự cố P0** (triết lý "không sai một xu" — amend theo review 2026-07-02): log **ERROR** kèm chi tiết (wallet/txn id, expected vs actual) **+ email admin NGAY** qua `EmailService` (Resend sẵn có, địa chỉ `app.ops.admin-email`) — KHÔNG dừng ở log. Sentry chồng thêm tầng khi vào P2. Repo bổ sung 2 query gộp (per-wallet, per-txn) để job không N+1.
 
 ---
 
@@ -157,9 +159,19 @@ ALTER TABLE escrow_holds   ADD CONSTRAINT chk_escrow_split
     CHECK (gross_amount = commission_amount + host_net_amount
            AND commission_amount >= 0 AND host_net_amount >= 0);
 
--- F3: enum += REVERSAL (danh sách mới xếp alphabet, khớp Hibernate)
-ALTER TABLE transactions MODIFY COLUMN type
-    enum('COMMISSION','PAYOUT','REFUND','REVERSAL','TICKET_PURCHASE','TOPUP') NOT NULL;
+-- F3 + enum policy 2026-07-02 (master §6): convert MỌI cột enum native → VARCHAR(30).
+-- Từ đó: thêm giá trị enum (REVERSAL ngay bây giờ, SEPAY/SUSPENSE_*/TICKET_RESALE... sau này)
+-- = chỉ thêm hằng Java, KHÔNG cần DDL. Danh sách cột chốt bằng grep "enum(" V1__init.sql
+-- lúc viết migration — dưới đây là các cột đã biết (kiểm kê đủ khi code):
+ALTER TABLE transactions MODIFY COLUMN type             VARCHAR(30) NOT NULL;
+ALTER TABLE transactions MODIFY COLUMN payment_provider VARCHAR(30) NULL;
+ALTER TABLE transactions MODIFY COLUMN status           VARCHAR(30) NOT NULL;
+ALTER TABLE bookings     MODIFY COLUMN status           VARCHAR(30) NOT NULL;
+ALTER TABLE escrow_holds MODIFY COLUMN status           VARCHAR(30) NOT NULL;
+ALTER TABLE events       MODIFY COLUMN status           VARCHAR(30) NOT NULL;
+ALTER TABLE events       MODIFY COLUMN category         VARCHAR(30) NOT NULL;
+-- … + users.status, user_roles.role, notifications.type, rooms.status, recordings.status,
+--     summaries.status (nếu có) — grep V1 để không sót cột nào.
 
 -- F4: timestamps audit
 ALTER TABLE transactions ADD COLUMN completed_at DATETIME(6) NULL;
@@ -171,6 +183,7 @@ ALTER TABLE escrow_holds
 Ghi chú:
 - Trigger 1-statement (không `BEGIN…END`) → Flyway chạy thẳng, không cần đổi delimiter.
 - Entity phải thêm field khớp (`completedAt`, `refundedAt`, `paidOutAt`, enum `REVERSAL`) cùng commit — `ddl-auto: validate` + CI (contextLoads chạy Flyway thật) sẽ bắt nếu lệch.
+- **Đi kèm convert VARCHAR:** set `hibernate.type.preferred_enum_jdbc_type: VARCHAR` (application.yaml, cả profile schema-gen) để Hibernate map @Enumerated(STRING) → VARCHAR thống nhất; verify tên property đúng với Hibernate bundled trong Boot 4.1 + chạy `ddl-auto: validate` pass trên dev TRƯỚC khi chốt file V4.
 - `REVERSAL` slice này chỉ *sẵn sàng* (enum + type), chưa có endpoint admin tạo bút toán đảo — công cụ xử lý sự cố, dùng tay qua service khi cần.
 
 ---
@@ -183,6 +196,8 @@ app:
     ticket-commission-percent: 5      # O-M1 — đã chốt 5%
     escrow-release-delay-days: 3      # O-M3 — dispute window sau ENDED
     dev-topup-enabled: false          # bật tay ở local; prod luôn tắt (R16)
+  ops:
+    admin-email: ${ADMIN_ALERT_EMAIL} # nhận email P0 (reconcile lệch — §4)
 ```
 
 ---

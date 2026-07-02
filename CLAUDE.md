@@ -39,6 +39,7 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
 - **Đầu session mới (chưa có context):** đọc `master/20260702-master-roadmap.md` trước tiên — nó cho biết dự án đang ở phase nào, plan nào đã duyệt/chưa duyệt, việc gì kế tiếp. Không nhận task nào mà bỏ qua bước này.
 - **Trước khi code BẤT KỲ slice nào:** đọc `master/20260702-technical-architecture.md` — đó là chuẩn ràng buộc (stack, ranh giới module, RULE transaction/security/enum/migration). Code mâu thuẫn doc đó = sai, kể cả khi plan chi tiết nói khác (sửa doc trước, code sau).
 - **Plan phase (details/p2..p6) là KHUNG viết trước nhiều tháng:** trước khi code phase nào, BẮT BUỘC chạy mục "Refresh checklist đầu phase" trong doc đó (đối chiếu docs provider, số migration thật, code đã trôi) và chốt các mục "Đề xuất cần chốt" (Đ-*) với user. Không code thẳng từ doc khung chưa refresh.
+- **Plan mới ghi đè plan cũ → đánh dấu ngược CÙNG COMMIT:** thêm banner `⛔ SUPERSEDED (ngày — plan mới §mục)` vào ĐÚNG CHỖ bị ghi đè trong plan cũ (không chỉ ghi ở plan mới). Hai nguồn sự thật mâu thuẫn không đánh dấu = lỗi quy trình.
 
 ## 3. Nguyên tắc kỹ thuật (SOLID + Clean Architecture — BẮT BUỘC)
 

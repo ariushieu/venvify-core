@@ -90,7 +90,7 @@ Verify: header Authorization = JWT ký bằng api-key/secret (SDK có helper). I
 
 | Client SEND | Server broadcast | Persist |
 |---|---|---|
-| `/app/room.{id}.chat` `{content ≤ 1000}` | `/topic/room.{id}.chat` `{messageId, sender{publicId,name,avatar}, content, at}` | `chat_messages` insert đồng bộ (trong tx nhỏ riêng, KHÔNG chặn broadcast — ghi xong mới broadcast để có id) |
+| `/app/room.{id}.chat` `{content ≤ 1000}` | `/topic/room.{id}.chat` `{messageId, sender{publicId,name,avatar}, content, at}` | `chat_messages` insert đồng bộ trong tx nhỏ riêng, **broadcast SAU khi insert xong** (broadcast cần id + message đã chắc chắn persist). Chấp nhận +vài ms latency/message (MySQL loopback); KHÔNG async-hóa — tránh broadcast message chưa ghi (mất khi crash, không có id để delete) |
 | host: `/app/room.{id}.chat.delete` `{messageId}` | `.chat` `{type: DELETED, messageId}` | set `deleted_by/deleted_at` (V7 — không hard delete, giữ vết moderation) |
 | host: poll create/close (REST `POST /events/{id}/polls`, `POST /polls/{id}/close` — mutation qua REST cho validate/swagger, broadcast qua STOMP) | `.poll` `{poll, options, status}` | `polls`/`poll_options` |
 | `/app/poll.{id}.vote` `{optionId}` | `.poll` kết quả tổng (throttle 1 msg/s/poll) | `poll_votes` UNIQUE(poll,user) + `vote_count` UPDATE atomic |

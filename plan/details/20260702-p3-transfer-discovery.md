@@ -35,10 +35,12 @@ PENDING ──accept+paid──▶ COMPLETED
 
 Lock booking `FOR UPDATE` → verify: booking CONFIRMED · `transfer_count < max-hops` · `now < event.start_time` · event không CANCELLED/ENDED · receiver chưa có booking event này (check trước cho lỗi đẹp — UNIQUE(event_id, attendee_id) vẫn là chốt chặn cuối) → mutate: `booking.attendee = to_user`, `transfer_count++`, transfer COMPLETED (+ `transaction_id` nếu resale). Escrow gốc KHÔNG đụng (D10). AFTER_COMMIT: notification 2 chiều + email.
 
+> **Chính sách refund sau resale (có chủ đích — review 2026-07-02, chi tiết 20260630 §3.4):** event hủy → refund 100% `price_paid` GỐC từ escrow về **chủ vé hiện tại**, bất kể giá resale. Receiver mua rẻ hơn giá gốc sẽ nhận nhiều hơn số đã trả — phần chênh là thiệt của người bán lại (tự chấp nhận khi bán dưới giá); tiền resale P2P không truy hồi. R1 chặn chiều ngược. Test §6 phải assert đúng số này.
+
 ### 1.3 Thanh toán resale (price > 0)
 
 - **Đường ví:** receiver accept → 1 transaction: `postTransfer` ví receiver → ví sender (txn `TICKET_RESALE`, ref `RSL-{uuidv7}`; commission O1 = 0% nên full price) + §1.2 cùng transaction.
-- **Đường QR:** tái dùng `payment_intents` purpose **TRANSFER** (ALTER enum V6) — webhook topup-first vào ví receiver (P2 §2.5) rồi chạy đường ví trong cùng transaction. Mọi edge (thiếu/thừa/muộn) thừa kế nguyên si hành vi P2. ✨
+- **Đường QR:** tái dùng `payment_intents` purpose **TRANSFER** (thêm hằng Java, không cần DDL — VARCHAR từ V4, master §6) — webhook topup-first vào ví receiver (P2 §2.5) rồi chạy đường ví trong cùng transaction. Mọi edge (thiếu/thừa/muộn) thừa kế nguyên si hành vi P2. ✨
 - Tặng (price = 0): accept là complete luôn, không txn.
 
 ### 1.4 Edge cases phải test
@@ -80,7 +82,7 @@ Sender = receiver → 400 · receiver có vé rồi → 409 · 2 receiver accept
 
 ## 3. Migration V6 (draft)
 
-`V6__p3_transfer_discovery.sql`: `ticket_transfers` (DDL đã có ở plan 20260630 §5 — thêm cột theo state machine: `declined_at`? — dùng `status` + `updated_at` đủ, KHÔNG thêm) · `ALTER bookings ADD transfer_count INT NOT NULL DEFAULT 0` · `ALTER transactions MODIFY type ENUM(<full alphabet + TICKET_RESALE>)` · `ALTER payment_intents MODIFY purpose ENUM('BOOKING','TOPUP','TRANSFER')` · `ALTER TABLE events ADD FULLTEXT ft_events_title_desc (title, description)`.
+`V6__p3_transfer_discovery.sql`: `ticket_transfers` (DDL đã có ở plan 20260630 §5 — thêm cột theo state machine: `declined_at`? — dùng `status` + `updated_at` đủ, KHÔNG thêm) · `ALTER bookings ADD transfer_count INT NOT NULL DEFAULT 0` · `ALTER TABLE events ADD FULLTEXT ft_events_title_desc (title, description)`. (+TICKET_RESALE, +TRANSFER chỉ là hằng Java — cột VARCHAR từ V4, master §6.)
 
 ## 4. Config mới
 
@@ -114,6 +116,6 @@ Demo: A mua vé paid → pass cho B (tặng) và C mua lại từ D qua QR → h
 ## 8. Refresh checklist đầu phase
 
 - [ ] Chốt O1–O3 (§0) + rà lại R1–R6 plan 20260630 còn đúng không.
-- [ ] Số migration V thật; enum list thật ở thời điểm đó (V4/V5 đã đổi).
+- [ ] Số migration V thật; kiểm enum ledger master §6 đã cập nhật giá trị V4/V5 (không cần DDL — VARCHAR).
 - [ ] P2 payment_intents chạy prod ổn chưa (đường QR resale phụ thuộc).
 - [ ] Quyết storefront basic làm trong P3 hay đẩy P6 (nhìn quỹ thời gian thực tế).

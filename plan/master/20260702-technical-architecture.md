@@ -22,7 +22,7 @@
 | Email | Resend HTTP API (`EmailService` interface) | ✅ | Reminder/receipt P2 dùng luôn, không thêm SMTP |
 | Realtime media | **LiveKit self-host** (SFU + TURN embedded + Egress) | 📐 P4, chờ O-MP1 | PoC 2 tuần đầu P4; fallback = LiveKit Cloud (đổi URL/key, không đổi code) |
 | Realtime data | Spring WebSocket **STOMP**, SimpleBroker in-memory | 📐 P4 | Chat/poll/Q&A/raise-hand. 1 instance → không cần Redis relay; scale-path ghi §14 |
-| Cache | Caffeine in-process | 📐 P3 | Redis KHÔNG vào Spring; Redis chỉ tồn tại trên VPS2 phục vụ LiveKit egress |
+| Cache | Caffeine in-process | 📐 P1 (T6) → P3 | Vào từ P1 cho login-fail counter (T6 §15); cache list ở P3. Redis KHÔNG vào Spring; Redis chỉ tồn tại trên VPS2 phục vụ LiveKit egress |
 | Storage | Cloudflare R2 qua AWS SDK v2 (S3 client) | 📐 P4/P5 | Bucket private + presigned URL |
 | AI | Whisper (OpenAI/Groq — chọn qua interface) + Claude API | 📐 P5 | Provider = interface + config, mock được trong test |
 | Docs API | springdoc-openapi 3.0.x (swagger-ui) | ✅ | OpenAPI là contract với FE |
@@ -112,7 +112,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 
 **Rate limiting**
 - nginx zone chung 10r/s/IP ✅; P2 thêm zone riêng cho `/api/v1/auth/(login|register|resend-verification)` ~5r/m (T5 §15); `/webhooks/**` KHÔNG nằm trong zone auth.
-- App-level (P2): đếm login fail theo account (Caffeine), khóa 15' sau 10 lần sai.
+- App-level (**P1 — T6 §15**, kéo sớm theo review 2026-07-02: prod không được chạy nhiều tuần với login không chống brute-force): đếm login fail theo account (Caffeine), khóa 15' sau 10 lần sai; response vẫn 401 generic (không lộ trạng thái khóa — khớp chính sách account-lifecycle).
 
 **Secrets** — env-only ✅, không literal password-shaped kể cả dummy CI (bài học GitGuardian). Lộ trình secret theo phase:
 
@@ -137,8 +137,8 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 
 - `BaseEntity` (id, public_id UUIDv7, created_at, updated_at, `@Version`) ✅; `SoftDeletableEntity` chỉ `users`, `events` ✅. **RULE:** bảng tiền và bảng append-only không bao giờ soft/hard-delete.
 - Tiền `BIGINT` VND nguyên ✅ · enum `@Enumerated(STRING)` ✅ · text dài `TEXT`.
-- **⚠ Native ENUM policy:** V1 export từ Hibernate nên cột enum là **ENUM MySQL native**. RULE: thêm giá trị enum Java = BẮT BUỘC file migration `ALTER TABLE ... MODIFY COLUMN` liệt kê **đầy đủ** giá trị (alphabet — quyết định từ plan money-core; bảng nhỏ nên ALGORITHM=COPY chấp nhận được). Bảng mới cũng dùng ENUM native cho nhất quán + qua được `ddl-auto: validate`.
-- **Enum ledger** (mọi thay đổi enum ghi vào đây):
+- **Enum storage = VARCHAR (quyết 2026-07-02 — THAY policy native ENUM trước đó):** V1 export từ Hibernate ra ENUM MySQL native → mỗi lần thêm giá trị phải `ALTER ... MODIFY` liệt kê đầy đủ, nguồn lỗi lặp (review chéo xác nhận, quên 1 giá trị = sự cố prod). **V4 convert một lần MỌI cột enum → `VARCHAR(30)`** (kiểm kê bằng grep `enum(` trong V1__init.sql; set `hibernate.type.preferred_enum_jdbc_type: VARCHAR` để schema-gen/validate khớp — verify tên property lúc code). Từ đó: thêm giá trị enum = chỉ thêm hằng Java + cập nhật enum ledger, **KHÔNG cần DDL**; bảng mới dùng VARCHAR cho cột enum. Đánh đổi (chấp nhận): mất ràng buộc giá trị tầng DB — `@Enumerated(STRING)` chỉ ghi được giá trị hợp lệ từ code; SQL tay phải cẩn thận.
+- **Enum ledger** (mọi thay đổi GIÁ TRỊ enum vẫn ghi vào đây — hết cần DDL nhưng vẫn cần trace; V-number = phase giá trị xuất hiện):
 
 | Enum | Giá trị hiện tại | Kế hoạch thêm |
 |---|---|---|
@@ -157,9 +157,9 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 | V1 | init schema (Hibernate export) | ✅ đóng băng |
 | V2 | event time D13 + wallet account_type + seed 4 hũ hệ thống | ✅ |
 | V3 | auth tokens (refresh, email verification) | ✅ |
-| V4 | money-core: triggers append-only, CHECKs, +REVERSAL, completed_at/refunded_at/paid_out_at | 📐 plan đã duyệt |
-| V5 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until, ALTER PaymentProvider+SEPAY, ALTER TransactionType+SUSPENSE_* | 📐 |
-| V6 (P3) | ticket_transfers, bookings.transfer_count, ALTER TransactionType+TICKET_RESALE, FULLTEXT index events | 📐 |
+| V4 | money-core: triggers append-only, CHECKs, **convert mọi cột enum → VARCHAR(30)**, +REVERSAL, completed_at/refunded_at/paid_out_at | 📐 plan đã duyệt (amend 2026-07-02) |
+| V5 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until (giá trị enum mới: không cần DDL) | 📐 |
+| V6 (P3) | ticket_transfers, bookings.transfer_count, FULLTEXT index events | 📐 |
 | V7 (P4) | room_attendances, events.recording_enabled, recordings.audio_url, chat moderation cols | 📐 |
 | V8 (P5) | ai_jobs | 📐 |
 | V9 (P6) | audit_logs, reviews.hidden | 📐 |
@@ -184,7 +184,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 | Job | Lịch | Phase | Idempotent nhờ |
 |---|---|---|---|
 | Escrow release (auto-end + release sau delay 3d) | theo plan money-core §3.4 (mỗi giờ, phút lệch 0/30) | P1 | state check dưới lock |
-| Reconcile ledger (4 bất biến) | 03:17 hằng ngày | P1 | chỉ đọc + cảnh báo |
+| Reconcile ledger (4 bất biến) | 03:17 hằng ngày | P1 | chỉ đọc; lệch = P0 → email admin NGAY (§9) |
 | Booking hold expiry (nhả slot RESERVED quá hạn) | mỗi 1' | P2 | status check dưới lock |
 | Payment intent expiry | mỗi 5' | P2 | status |
 | Reminder T-24h / T-1h | mỗi 5' | P2 | `UNIQUE(event_id, kind)` |
@@ -203,7 +203,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 - **Log:** Log4j2 ✅; thêm requestId vào MDC (filter đọc `X-Request-Id` từ nginx `$request_id`) — T2 §15. **RULE log tiền:** ghi đủ (`transaction_ref`, wallet id, amount) nhưng KHÔNG log số dư người khác, số TK đầy đủ, secret, nội dung webhook thô ở mức INFO.
 - **Actuator (P2):** thêm starter; expose health/info/metrics trên `management.server.port=8081` loopback-trong-container (không publish cổng); `/health` custom giữ nguyên cho nginx + CD ✅.
 - **Sentry BE free tier (P2):** bắt 500 + job fail. **UptimeRobot** ping `/health` mỗi 5' — làm được ngay (user ops, T4).
-- Alert đáng giá nhất: reconcile phát hiện `SUM(ledger) ≠ 0` hoặc `balance_cached` lệch · webhook UNMATCHED · job fail liên tiếp ≥3 · 5xx đột biến.
+- Alert đáng giá nhất: reconcile phát hiện `SUM(ledger) ≠ 0` / `balance_cached` lệch / escrow lệch — **sự cố P0: email admin NGAY qua Resend từ P1** (`app.ops.admin-email`), KHÔNG chỉ log ERROR, không đợi Sentry (review 2026-07-02) · webhook UNMATCHED · job fail liên tiếp ≥3 · 5xx đột biến.
 - **Runbook** (bổ sung dần vào `deploy/README.md`): rollback = compose up image tag SHA trước đó · restore DB từ dump (§10) · rotate secret (thứ tự: đổi env → recreate app → revoke cũ).
 
 ---
@@ -212,6 +212,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 
 - Nightly 02:35 cron VPS: `mysqldump --single-transaction --routines venvify_db | gzip` → `/opt/backup/` + đẩy off-site (R2 khi có; trước đó scp về máy dev mỗi tuần). Giữ 14 bản.
 - **Restore drill:** 1 lần bắt buộc trước khi nhận tiền thật + mỗi tháng 1 lần nhanh (import vào container tạm, đếm bảng, so vài số dư).
+- **Runbook restore viết SỚM (T7 §15):** các bước restore/rollback cụ thể (lệnh, thứ tự, ai làm gì) vào `deploy/README.md` ngay khi setup cron backup ở P1 — platform giữ tiền thật không được ứng biến lúc sự cố; drill chạy đúng theo runbook để kiểm chứng chính nó.
 - CD bổ sung bước **pre-deploy dump** (P2): trước `docker compose up` app mới luôn dump nhanh — migration hỏng thì còn đường lùi.
 - RPO 24h / RTO ~1h — chấp nhận cho đồ án, nêu rõ trong báo cáo NFR. Binlog PITR = nâng cấp sau, không làm bây giờ.
 
@@ -230,7 +231,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 ## 12. Config & profiles
 
 - Profiles: default = dev localhost · `prod` (compose đặt `SPRING_PROFILES_ACTIVE=prod`) ✅ · `schema-gen` hết vai trò — xóa ở P7 dọn dẹp.
-- Namespace `app.<module>.<key>`: `app.money.*` (đã chốt) → tới: `app.sepay.*`, `app.payment.*`, `app.oauth.*`, `app.livekit.*`, `app.storage.*`, `app.ai.*`, `app.frontend-url`.
+- Namespace `app.<module>.<key>`: `app.money.*` (đã chốt) → tới: `app.sepay.*`, `app.payment.*`, `app.oauth.*`, `app.livekit.*`, `app.storage.*`, `app.ai.*`, `app.ops.*` (admin-email nhận alert P0 — từ P1), `app.frontend-url`.
 - **RULE:** giá trị nghiệp vụ đổi được (commission %, TTL, min payout, budget AI) = config, không hardcode. Flag nguy hiểm double-gate flag + profile (mẫu: dev-topup, money-core §3.6).
 
 ---
@@ -261,6 +262,8 @@ Scale-path đã ghi sẵn (chỉ mở khi cần): >1 app instance → ShedLock +
 | T3 | Bật Dependabot alerts trên GitHub (user, 1 click) | ngay |
 | T4 | UptimeRobot ping `/health` (user ops) | sau deploy prod #1 |
 | T5 | nginx: zone rate-limit riêng cho `/auth/*` + block WS upgrade sẵn cho P4 | P2 |
+| T6 | Login-fail counter theo account (Caffeine) + khóa 15', response 401 generic | đầu P1 code, cùng T1 (review: không ship prod thiếu chống brute-force) |
+| T7 | Runbook backup/restore/rollback trong `deploy/README.md` + chạy drill lần 1 | P1, cùng lúc setup cron backup — trước tiền thật |
 
 ---
 
@@ -272,3 +275,4 @@ Scale-path đã ghi sẵn (chỉ mở khi cần): >1 app instance → ShedLock +
 ## 17. Changelog
 
 - 2026-07-02 — tạo doc; thay thế SPEC §5.3–5.4 ở tầng kỹ thuật (SPEC giữ vai trò yêu cầu sản phẩm); FE tách khỏi phạm vi kỹ thuật backend.
+- 2026-07-02 (review chéo đợt 1) — **enum → VARCHAR từ V4** (bỏ policy native ENUM, user chốt); reconcile lệch = P0 email admin ngay (§9); T6 brute-force login kéo về P1, T7 runbook restore sớm (§15); đặc tả luồng RESERVED+intent (plan P2 §2.9, Đ-P2.6 reuse row); chính sách refund-sau-resale ghi tường minh (20260630 §3.4); supersede markers vào plan 20260630. RULE mới: plan mới ghi đè plan cũ → PHẢI thêm banner ⛔ vào đúng chỗ bị ghi đè trong plan cũ, cùng commit.

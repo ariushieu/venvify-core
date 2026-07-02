@@ -5,6 +5,13 @@
 
 > ⚠️ Bản thiết kế **bổ sung** vào schema đã có, CHƯA sinh code. Duyệt + chốt các `OPEN:` ở §6 xong mình mới tạo entity + migration `V2`.
 
+> **⛔ AMEND LOG (2026-07-02 — đọc trước khi dùng doc này, các plan sau ghi đè một phần):**
+> - **§2.3** (thêm `qr_payload`/`expires_at` vào transactions) — SUPERSEDED bởi bảng `payment_intents` (plan P2, Đ-P2.1).
+> - **§3.2** (Sepay QR: txn PENDING, tiền vào thẳng ESCROW, "ví buyer KHÔNG đụng") — SUPERSEDED bởi **topup-first** (plan P2 §2.5, Đ-P2.4). Dòng "Mua vé trực tiếp" bảng §1 đổi theo.
+> - **§2.4** (ALTER native enum) — hết cần từ V4: mọi cột enum convert sang VARCHAR (master §6, quyết 2026-07-02).
+> - **R6 (§4)**: cơ chế slot counter đặc tả chính xác tại plan P2 §2.9.
+> - **§6 OPEN**: O1–O3 chốt đề xuất tại plan P3 §0 · O4 giải quyết ở plan P2 · O5 đã chốt ở money-core (refund luôn về ví).
+
 ---
 
 ## 0. Quyết định đã chốt (từ trao đổi)
@@ -42,7 +49,7 @@
 |---|---|
 | Nạp ví (Sepay) | BANK_CLEARING → ví USER |
 | Mua vé bằng ví (ví đủ) | ví USER → ESCROW |
-| Mua vé trực tiếp (Sepay, ví thiếu) | BANK_CLEARING → ESCROW |
+| Mua vé trực tiếp (Sepay, ví thiếu) | ~~BANK_CLEARING → ESCROW~~ ⛔ topup-first (P2 §2.5): BANK_CLEARING → ví USER → ESCROW, cùng transaction |
 | Event xong (release) | ESCROW → ví HOST + COMMISSION |
 | Event hủy (refund) | ESCROW → ví buyer |
 | Host rút tiền (payout) | ví HOST → BANK_CLEARING |
@@ -81,6 +88,9 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 | transfer_count | INT | NOT NULL, DEFAULT 0 | đếm số lần đã pass; phục vụ RULE giới hạn hop |
 
 ### 2.3 `transactions` — thêm cột
+
+> ⛔ **SUPERSEDED (2026-07-02 — P2 Đ-P2.1):** KHÔNG thêm 2 cột này. Vòng đời chờ thanh toán tách sang bảng `payment_intents` (plan P2 §2.2); `transactions` chỉ ghi tiền thật (luôn SUCCESS, trừ REVERSAL). Giữ dưới đây làm sử liệu.
+
 | Cột | Kiểu | Ràng buộc | Ghi chú |
 |---|---|---|---|
 | qr_payload | VARCHAR(1000) | NULL | chuỗi/URL VietQR của Sepay |
@@ -89,6 +99,9 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 > Liên kết txn↔booking: dùng sẵn `bookings.purchase_txn_id` (set ngay lúc reserve). Webhook: tìm txn theo `transaction_ref` → tìm booking theo `purchase_txn_id`. **Không** thêm cột `booking_id` vào transactions (tránh FK 2 chiều thừa).
 
 ### 2.4 Enum — thêm giá trị (⚠️ CẦN migration DDL — đính chính)
+
+> ⚠️ **Amend 2026-07-02:** policy đổi lần nữa — **V4 convert mọi cột enum → VARCHAR(30)** (master §6). Các ALTER dưới đây KHÔNG còn cần từ V4; thêm giá trị enum = thêm hằng Java + cập nhật enum ledger.
+
 **Đính chính:** kiểm tra V1 thấy Hibernate sinh `@Enumerated(STRING)` trên MySQL thành **native `ENUM(...)`**, KHÔNG phải `VARCHAR` (vd `type enum('COMMISSION','PAYOUT',...)`). → Thêm giá trị enum **phải** `ALTER TABLE … MODIFY COLUMN … ENUM(...)` với danh sách mới (xếp **alphabet** để khớp Hibernate). Làm trong migration của slice tương ứng:
 - `TransactionType` += `TICKET_RESALE` → `alter table transactions modify column type enum('COMMISSION','PAYOUT','REFUND','TICKET_PURCHASE','TICKET_RESALE','TOPUP') not null;`
 - `PaymentProvider` += `SEPAY` → `alter table transactions modify column payment_provider enum('INTERNAL','MOMO','SEPAY','VNPAY');`
@@ -122,6 +135,9 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 2. Atomic: debit ví buyer (−price vào ledger) → tạo `escrow_hold` (HELD: gross/commission/host_net) → `Booking` CONFIRMED, `purchase_txn` = txn (TICKET_PURCHASE, INTERNAL, SUCCESS).
 
 ### 3.2 Mua vé — ví THIẾU → Sepay QR (đường ngoài, D11)
+
+> ⛔ **SUPERSEDED (2026-07-02 — P2 Đ-P2.4 "topup-first"):** các bước 2–4 dưới bị thay: webhook khớp intent → TOPUP vào ví user (đúng số tiền THẬT nhận) → nếu đủ điều kiện, mua vé từ ví trong CÙNG transaction; sai giá/đến muộn → tiền nằm ví + notify. Không còn txn PENDING, không còn "ví buyer KHÔNG đụng". Bước 1 (giữ chỗ) đặc tả chính xác tại P2 §2.9.
+
 1. Giữ chỗ: `Booking` RESERVED + `reserved_until = now + TTL` (vd 10–15').
 2. Tạo `Transaction` (TICKET_PURCHASE, **SEPAY**, PENDING, `transaction_ref`, `qr_payload`, `expires_at`). Hiện QR đúng giá vé. Set `booking.purchase_txn`.
 3. User quét & trả → **Sepay webhook** (khớp `transaction_ref` nhúng trong nội dung CK).
@@ -137,6 +153,7 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 ### 3.4 Event hủy sau khi đã pass
 - Refund escrow của chỗ đó về **chủ hiện tại** (`booking.attendee` = người mua cuối) → credit ví họ.
 - Tiền resale P2P giữ nguyên (người bán đã thu của người mua). Host không nhận (event hủy).
+- **Chính sách có chủ đích (ghi rõ 2026-07-02):** refund luôn = 100% **giá gốc** (`price_paid`), KHÔNG phải giá resale. C mua lại từ B rẻ hơn giá gốc → event hủy → C nhận NHIỀU hơn số đã trả; phần chênh là thiệt của B (tự chấp nhận khi bán dưới giá). R1 (`price ≤ price_paid`) chặn chiều đầu cơ ngược. Đổi lấy: escrow không cần truy vết chuỗi resale P2P — đơn giản, KHÔNG phải bug. Ghi vào ToS/FAQ khi làm content.
 
 ---
 
@@ -146,7 +163,7 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 - **R3:** Chỉ pass khi `booking.status = CONFIRMED` và **trước khi event bắt đầu** (hoặc trước `start_time − cutoff`).
 - **R4:** Người nhận phải là user đã đăng ký (resolve email/handle). (Mời người chưa có tài khoản → `OPEN`, để sau.)
 - **R5:** Webhook Sepay idempotent: cùng `transaction_ref` xử lý 1 lần (UNIQUE + check status trước khi ghi).
-- **R6:** Reserve có TTL: job/lazy-check nhả slot khi `reserved_until < now` (ăn khớp slot counter D4 — chỉ RESERVED còn hạn mới tính vào `claimed_slots`).
+- **R6:** Reserve có TTL: job/lazy-check nhả slot khi `reserved_until < now` (ăn khớp slot counter D4 — chỉ RESERVED còn hạn mới tính vào `claimed_slots`). **Cơ chế counter chính xác: P2 §2.9** — `claimed_slots` tăng/giảm tường minh dưới lock (`++` khi tạo RESERVED, `--` khi nhả), KHÔNG đếm lại động.
 
 **RULE phần tiền (double-entry — D12):**
 - **R7:** `ledger_entries` chỉ **INSERT** (append-only). Sửa sai = ghi **bút toán đảo** (reversal), KHÔNG UPDATE/DELETE.
@@ -162,7 +179,7 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 
 > **Cập nhật:** đã tách migration theo nhóm. **`V2__event_time_and_wallet_accounts.sql`** (nền D12+D13) **đã tạo & implement** (events nullable + `original_start_time`/`timezone`; wallets `account_type` + nới `user_id` NULL + seed 4 hũ hệ thống). Phần dưới (`ticket_transfers`, cột `bookings`/`transactions`) để dành các file **V3+** đi cùng slice Booking/Payment/Transfer.
 
-DDL gốc gộp (tham chiếu — sẽ rải vào V3+):
+DDL gốc gộp (tham chiếu — sẽ rải vào V3+; ⛔ khối `transactions` dưới đã SUPERSEDED bởi P2 Đ-P2.1 — xem AMEND LOG đầu file):
 ```sql
 -- bookings
 ALTER TABLE bookings
@@ -219,7 +236,7 @@ ALTER TABLE events
   ADD COLUMN timezone VARCHAR(40) NULL;
 ```
 > Có thể tách thành nhiều file `V2`, `V3`… cho rõ từng nhóm thay đổi (transfer / double-entry / event-time) nếu muốn — Flyway áp theo thứ tự.
-> V1 đóng băng — KHÔNG sửa. Enum thêm giá trị → không cần DDL (cột đã VARCHAR). `ddl-auto: validate` sẽ bắt nếu DDL lệch entity.
+> V1 đóng băng — KHÔNG sửa. Enum thêm giá trị: **từ V4 không cần DDL** (mọi cột enum convert VARCHAR — master §6). Trước V4 cột là ENUM native (đính chính §2.4 — câu gốc ở đây từng ghi nhầm "cột đã VARCHAR"). `ddl-auto: validate` sẽ bắt nếu DDL lệch entity.
 
 ---
 

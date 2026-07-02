@@ -25,9 +25,9 @@ Toàn pipeline **async ngoài request**, idempotent, sống sót app-restart nh�
 | Cột | Kiểu | Ghi chú |
 |---|---|---|
 | id, created_at, updated_at | | |
-| type | ENUM('TRANSCRIBE','SUMMARIZE') | |
+| type | VARCHAR(20) NOT NULL | TRANSCRIBE/SUMMARIZE (cột enum = VARCHAR — master §6) |
 | ref_id | BIGINT NOT NULL | recording_id / summary_id |
-| status | ENUM('QUEUED','RUNNING','SUCCEEDED','FAILED','DEAD') | FAILED = chờ retry; DEAD = hết attempts |
+| status | VARCHAR(20) NOT NULL | QUEUED/RUNNING/SUCCEEDED/FAILED/DEAD — FAILED = chờ retry; DEAD = hết attempts |
 | attempts | INT DEFAULT 0 | max 3 |
 | next_attempt_at | DATETIME(6) | backoff 1' → 5' → 25' |
 | last_error | VARCHAR(1000) | |

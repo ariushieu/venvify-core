@@ -22,7 +22,7 @@
 ## 3. Notification in-app
 
 - `GET /notifications?unreadOnly=&page=` (id DESC) · `PATCH /notifications/{id}/read` · `POST /notifications/read-all` · `GET /notifications/unread-count` (FE poll 30s — đủ MVP, KHÔNG WebSocket riêng cho việc này).
-- Nguồn phát: các listener AFTER_COMMIT đã khai (P2 receipts, P4 recording, P5 summary, P6 follow/review) — P6 gom thành **NotificationService.dispatch(type, user, refType, refPublicId, params)** duy nhất + template title/content theo `NotificationType` (enum đã có 7 loại — V9 ALTER thêm loại mới nếu phát sinh: PAYOUT_PAID, SUMMARY_READY, TRANSFER_* … kiểm kê lúc code ⚠ enum native — master §6).
+- Nguồn phát: các listener AFTER_COMMIT đã khai (P2 receipts, P4 recording, P5 summary, P6 follow/review) — P6 gom thành **NotificationService.dispatch(type, user, refType, refPublicId, params)** duy nhất + template title/content theo `NotificationType` (enum đã có 7 loại — loại mới phát sinh: PAYOUT_PAID, SUMMARY_READY, TRANSFER_*… chỉ cần thêm hằng Java + enum ledger, KHÔNG cần DDL — cột VARCHAR từ V4, master §6).
 - Purge job > 90 ngày (master §8, 04:41 CN).
 
 ## 4. Admin (module `admin/` mới — mọi endpoint `@PreAuthorize("hasRole('ADMIN')")`)
@@ -47,7 +47,7 @@ Seed admin: migration V9 KHÔNG hardcode — runbook: SQL tay set role ADMIN cho
 
 ## 6. Thay đổi hệ thống
 
-V9__p6_social_admin.sql: `audit_logs` · `ALTER reviews ADD hidden` · ALTER enum `notifications.type` (kiểm kê loại mới — native ENUM) · config `app.social.{review-window-days: 14, notify-email-max-followers: 500}`. Module mới `admin/` (controller + service mỏng gọi service các module — ma trận master §2 dòng admin).
+V9__p6_social_admin.sql: `audit_logs` · `ALTER reviews ADD hidden` · config `app.social.{review-window-days: 14, notify-email-max-followers: 500}`. (NotificationType mới không cần DDL — VARCHAR từ V4, master §6.) Module mới `admin/` (controller + service mỏng gọi service các module — ma trận master §2 dòng admin).
 
 ## 7. Test plan
 
@@ -59,7 +59,7 @@ Admin panel (API) đủ: ban user đang online → bị đá và không refresh 
 
 ## 9. Refresh checklist đầu phase
 
-- [ ] Kiểm kê NotificationType phát sinh thực tế P2–P5 → chốt danh sách ALTER enum.
+- [ ] Kiểm kê NotificationType phát sinh thực tế P2–P5 → cập nhật enum ledger master §6 (không cần DDL).
 - [ ] Đối chiếu luồng refund money-core thực tế (đã qua 4 phase — code là chuẩn, plan là tham khảo).
 - [ ] Rà cut-line roadmap: storefront/host-reply/analytics mở rộng còn thời gian không (P7 hardening ngay sau).
 - [ ] Số migration V thật.
