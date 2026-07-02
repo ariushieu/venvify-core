@@ -1,0 +1,77 @@
+# ==========================================================
+# venvify-core — production compose (VPS)
+# Đặt tại: ~/vps-setup-kit/projects/venvify-core/docker-compose.yml
+# Yêu cầu: đã chạy setup_vps.sh (tạo network backend-network + /opt/data)
+# cp .env.example .env rồi điền secret thật trước khi `docker compose up -d`
+# ==========================================================
+
+services:
+  app:
+    image: ariushieu/venvify-core:latest
+    container_name: venvify-core-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"            # chỉ loopback — internet đi qua Nginx
+    environment:
+      TZ: ${TZ:-UTC}
+      SPRING_PROFILES_ACTIVE: prod
+    env_file:
+      - .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      # /health kiểm cả DB (SELECT 1) — CD chỉ pass khi container thật sự phục vụ được request.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - backend-network
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mysql:
+    image: mysql:8.0
+    container_name: venvify-core-mysql
+    restart: unless-stopped
+    command: >
+      --default-time-zone=${MYSQL_TZ_OFFSET:-+00:00}
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=128M
+      --max-connections=50
+    environment:
+      TZ: ${TZ:-UTC}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - /opt/data/venvify-core/mysql:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"            # loopback only — không expose DB ra internet
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-network
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  backend-network:
+    external: true

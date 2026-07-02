@@ -1,0 +1,57 @@
+# ==========================================================
+# CI - Build and Test (feature branches + PRs vào master)
+# Chạy full `mvnw verify` với MySQL 8 thật → Flyway migrate V1..Vn
+# + Hibernate ddl-auto=validate được kiểm chứng trên mỗi lần push.
+# ==========================================================
+
+name: CI - Build and Test
+
+on:
+  push:
+    branches-ignore:
+      - master                     # master do CD lo (CD cũng chạy test trước khi deploy)
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root
+          MYSQL_DATABASE: venvify_db
+          MYSQL_USER: venvify
+          MYSQL_PASSWORD: ci_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Build and test
+        env:
+          # @SpringBootTest cần context thật: DB + secret (giá trị CI-only, không phải secret thật)
+          MYSQL_USER: venvify
+          MYSQL_PASSWORD: ci_password
+          SECRET_KEY: ci-only-jwt-secret-key-needs-at-least-32-bytes-0123456789abcdef
+          RESEND_API_KEY: re_ci_dummy_key
+        run: |
+          chmod +x mvnw
+          ./mvnw -B verify
