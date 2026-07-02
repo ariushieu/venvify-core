@@ -1,9 +1,9 @@
 # Plan: Money-core — sổ kép, mua vé bằng ví, refund/release escrow
 
-**Ngày tạo:** 2026-07-02 · **Trạng thái:** ⏳ CHỜ DUYỆT · **Người duyệt:** chủ dự án
+**Ngày tạo:** 2026-07-02 · **Trạng thái:** ✅ ĐÃ DUYỆT (O-M1..O-M4 chốt 2026-07-02) · **Người duyệt:** chủ dự án
 **Liên quan:** [`20260630-ticket-transfer-and-payment.md`](./20260630-ticket-transfer-and-payment.md) (D11/D12, luồng §3.1), [`20260624-erd-entity-design.md`](./20260624-erd-entity-design.md) (D2), CLAUDE.md §5 ("không sai một xu")
 
-> ⚠️ Slice TIỀN — duyệt + chốt các `O-M*` ở §10 xong mới code. Bao gồm cả các fix từ đợt review entity 2026-07-02.
+> ⚠️ Slice TIỀN — các `O-M*` ở §10 đã chốt 2026-07-02, plan sẵn sàng implement theo thứ tự §11. Bao gồm cả các fix từ đợt review entity 2026-07-02.
 
 ---
 
@@ -13,8 +13,8 @@
 1. Vá 6 lỗ hổng từ review entity (migration `V4` + chỉnh entity/repo) — §1.
 2. Engine sổ kép: `LedgerService.postTransfer(...)` — mọi chuyển động tiền đi qua đúng 1 cửa — §2.
 3. Mua vé bằng ví (luồng 3.1 plan cũ) — bỏ guard 400 ở `BookingService` — §3.1.
-4. Refund: user tự hủy vé paid + event bị hủy — §3.2, §3.3.
-5. Release escrow khi event ENDED → ví HOST + hũ COMMISSION — §3.4.
+4. Refund: CHỈ khi event bị hủy (vé paid user KHÔNG tự hủy được — O-M2) — §3.2, §3.3.
+5. Release escrow khi event ENDED + hết delay 3 ngày → ví HOST + hũ COMMISSION — §3.4.
 6. API ví: số dư + sao kê — §3.5. Top-up dev-only (tắt cứng ở prod) — §3.6.
 7. Job đối soát (reconcile) định kỳ — §4.
 8. Unit test đầy đủ cho mọi nghiệp vụ trên — §9.
@@ -84,22 +84,27 @@ Atomic (1 `@Transactional`, thứ tự khóa R13: event trước → ví sau):
 
 > Slice này mua bằng ví = trừ tiền NGAY nên **không cần** trạng thái RESERVED/`reserved_until` — cái đó thuộc luồng Sepay QR (chờ thanh toán async), để slice sau.
 
-### 3.2 User tự hủy vé paid (sửa `BookingService.cancel`)
-Giữ nguyên rule hiện có (chỉ attendee, chỉ RESERVED/CONFIRMED, **trước `start_time`**). Thêm nhánh paid (`price_paid > 0`):
-1. Tạo `Transaction` (REFUND, INTERNAL, SUCCESS, ref `RFD-...`).
-2. `postTransfer(txn, hũ ESCROW → ví buyer, gross)` — **hoàn 100% gross** (O-M2): commission chỉ thực thu khi release, tiền đang nằm nguyên trong ESCROW.
-3. Hold → REFUNDED + `refunded_at`; booking → **REFUNDED** (thay vì CANCELLED — phân biệt được "hủy vé free" vs "đã hoàn tiền"); trả slot dưới khóa event như hiện tại.
+### 3.2 Vé paid: user KHÔNG tự hủy (O-M2 — đã chốt)
+`BookingService.cancel` thêm guard: `price_paid > 0` → `BadRequestException("Paid bookings cannot be cancelled — transfer your ticket instead")`. Refund vé paid CHỈ xảy ra khi **event bị hủy** (§3.3). Không đi được → pass vé (transfer slice sau). Vé free giữ nguyên hành vi tự hủy hiện tại.
 
-### 3.3 Event bị hủy (hook vào `EventService` cancel)
-Với mọi hold HELD của event: lặp từng hold → refund như §3.2 (mỗi hold 1 txn REFUND riêng, per-buyer). Booking tương ứng → REFUNDED. Chạy trong transaction của thao tác hủy event (số lượng attendee MVP nhỏ; sau này nếu event nghìn vé thì chuyển sang job async — ghi chú lại, không làm bây giờ).
+> Lý do: bảo vệ host khỏi hủy hàng loạt sát giờ; đơn giản hóa kế toán (bớt 1 luồng refund); đường thoát cho attendee là transfer — đúng triết lý D9.
 
-### 3.4 Release escrow khi event ENDED
+### 3.3 Event bị hủy (hook vào `EventService` cancel) — luồng refund DUY NHẤT
+Với mọi hold HELD của event, mỗi hold:
+1. Tạo `Transaction` (REFUND, INTERNAL, SUCCESS, ref `RFD-...`, user = buyer).
+2. `postTransfer(txn, hũ ESCROW → ví buyer, gross)` — **hoàn 100% gross**: commission chỉ thực thu khi release, tiền đang nằm nguyên trong ESCROW.
+3. Hold → REFUNDED + `refunded_at`; booking → **REFUNDED** (phân biệt với CANCELLED của vé free).
+
+Chạy trong transaction của thao tác hủy event (số lượng attendee MVP nhỏ; sau này nếu event nghìn vé thì chuyển sang job async — ghi chú lại, không làm bây giờ).
+
+### 3.4 Release escrow khi event ENDED + delay 3 ngày (O-M3 — đã chốt)
 `EscrowReleaseJob` (`@Scheduled`, mỗi 15 phút, bật `@EnableScheduling`):
-1. **Auto-end (O-M3):** event PUBLISHED/LIVE có `end_time < now` → set ENDED. (`EventStatus.ENDED` đã có trong enum nhưng chưa ai set — job này là nơi transition đầu tiên.)
-2. Với từng event ENDED còn hold HELD: tạo `Transaction` (COMMISSION, INTERNAL, SUCCESS, ref `REL-...`, user = host) + `postSplit(txn, ESCROW → [ví HOST: host_net, hũ COMMISSION: commission])` → hold RELEASED + `released_at`.
-3. Mỗi hold xử lý trong transaction riêng (1 hold fail không chặn các hold khác); idempotent tự nhiên vì chỉ quét status HELD.
+1. **Auto-end:** event PUBLISHED/LIVE có `end_time < now` → set ENDED. (`EventStatus.ENDED` đã có trong enum nhưng chưa ai set — job này là nơi transition đầu tiên.)
+2. **Dispute window:** chỉ release hold của event có `end_time < now − release-delay` (config `app.money.escrow-release-delay-days: 3`). Trong 3 ngày đó admin còn can thiệp được (hủy event → refund) trước khi tiền rời ESCROW.
+3. Với từng hold HELD đủ điều kiện: tạo `Transaction` (COMMISSION, INTERNAL, SUCCESS, ref `REL-...`, user = host) + `postSplit(txn, ESCROW → [ví HOST: host_net, hũ COMMISSION: commission])` → hold RELEASED + `released_at`.
+4. Mỗi hold xử lý trong transaction riêng (1 hold fail không chặn các hold khác); idempotent tự nhiên vì chỉ quét status HELD.
 
-> Host chưa có ví? Không xảy ra — mọi user đăng ký đều được tạo ví (auth slice đã làm). MVP release ngay khi ENDED, **chưa có dispute window** (ghi nhận, làm sau nếu cần).
+> Host chưa có ví? Không xảy ra — mọi user đăng ký đều được tạo ví (auth slice đã làm).
 
 ### 3.5 API ví (`WalletController`, cần auth)
 | Method | Path | Mô tả |
@@ -175,7 +180,8 @@ Ghi chú:
 ```yaml
 app:
   money:
-    ticket-commission-percent: 5      # O-M1 — chờ chốt
+    ticket-commission-percent: 5      # O-M1 — đã chốt 5%
+    escrow-release-delay-days: 3      # O-M3 — dispute window sau ENDED
     dev-topup-enabled: false          # bật tay ở local; prod luôn tắt (R16)
 ```
 
@@ -192,19 +198,20 @@ app:
 ## 9. Test (unit, Mockito — mỗi API/nghiệp vụ đều có)
 
 - `LedgerServiceTest`: transfer happy; thiếu tiền ví USER; hũ hệ thống được âm; thứ tự khóa id tăng dần (verify order); split rounding (99.999đ/5% → 4.999 + 95.000); tổng leg ≠ gross → exception; amount ≤ 0 → exception.
-- `BookingServiceTest` (bổ sung): mua paid thành công (đủ bút toán + hold + CONFIRMED); thiếu tiền → rollback slot; hold HELD trùng → Conflict; hủy paid → refund 100% + REFUNDED + trả slot; hủy sau start_time vẫn bị chặn (giữ test cũ).
-- `EscrowReleaseJobTest`: auto-end theo end_time; release đúng split; hold lỗi không chặn hold khác; idempotent (chạy 2 lần không release đôi).
+- `BookingServiceTest` (bổ sung): mua paid thành công (đủ bút toán + hold + CONFIRMED); thiếu tiền → rollback slot; hold HELD trùng → Conflict; **hủy vé paid → bị chặn** (O-M2); vé free tự hủy vẫn hoạt động (giữ test cũ).
+- `EventServiceTest` (bổ sung): hủy event có vé paid → refund 100% từng buyer + hold REFUNDED + booking REFUNDED.
+- `EscrowReleaseJobTest`: auto-end theo end_time; **chưa hết delay 3 ngày → không release**; hết delay → release đúng split; hold lỗi không chặn hold khác; idempotent (chạy 2 lần không release đôi).
 - `ReconciliationJobTest`: phát hiện lệch từng bất biến (4 case) + case sạch.
 - `WalletControllerTest` mức service: topup bị chặn khi flag off / profile prod.
 
 ---
 
-## 10. OPEN — cần bạn chốt trước khi code
+## 10. OPEN — ĐÃ CHỐT (2026-07-02)
 
-- **O-M1 — Commission vé:** platform thu bao nhiêu % giá vé khi release? Khuyến nghị **5%** MVP (config được, đổi không cần migration). → chốt %.
-- **O-M2 — Refund khi user tự hủy:** hoàn **100%** trước `start_time`, sau `start_time` không cho hủy (rule hiện có). Không phí hủy MVP. → OK?
-- **O-M3 — Event ENDED:** tự động ENDED khi quá `end_time` (job 15') + release ngay, chưa có dispute window. Sau này có thể thêm nút "End event" cho host + delay release. → OK cho MVP?
-- **O-M4 — Top-up dev-only** gate flag + profile như §3.6 (prod không bao giờ có đường in tiền). → OK?
+- **O-M1 — Commission vé: 5%** (config `ticket-commission-percent`, đổi không cần migration).
+- **O-M2 — Vé paid KHÔNG tự hủy.** Refund chỉ khi event bị hủy; không đi được → pass vé (transfer slice). Vé free giữ quyền tự hủy như hiện tại.
+- **O-M3 — Auto ENDED theo `end_time` + delay release 3 ngày** (dispute window, config `escrow-release-delay-days`).
+- **O-M4 — Top-up dev-only: OK** — gate flag + tắt cứng ở profile prod.
 
 ---
 
@@ -212,7 +219,7 @@ app:
 
 1. Migration V4 + chỉnh entity/repo (F1–F7) — nền, chưa đổi hành vi.
 2. `LedgerService` + test (engine trước, cô lập).
-3. `EscrowService` + paid booking + refund (§3.1–3.3) + test.
+3. `EscrowService` + paid booking + guard hủy vé paid + refund khi event hủy (§3.1–3.3) + test.
 4. `EscrowReleaseJob` + `ReconciliationJob` (§3.4, §4) + test.
 5. `WalletController` + dev top-up (§3.5, §3.6) + test.
 
