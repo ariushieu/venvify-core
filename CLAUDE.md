@@ -36,6 +36,8 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
   - `/plan/details` — plan chi tiết per-slice (service design, DDL, rule, test), viết just-in-time ngay trước khi code slice đó.
 - **Đặt tên:** `YYYYMMDD-[ten-tinh-nang].md` (vd `20260331-user-authentication.md`).
 - **Quy trình** trước khi làm feature lớn: (1) tạo file plan trong `/plan` → (2) chờ user duyệt → (3) chỉ implement sau khi được duyệt.
+- **Trước khi code BẤT KỲ slice nào:** đọc `master/20260702-technical-architecture.md` — đó là chuẩn ràng buộc (stack, ranh giới module, RULE transaction/security/enum/migration). Code mâu thuẫn doc đó = sai, kể cả khi plan chi tiết nói khác (sửa doc trước, code sau).
+- **Plan phase (details/p2..p6) là KHUNG viết trước nhiều tháng:** trước khi code phase nào, BẮT BUỘC chạy mục "Refresh checklist đầu phase" trong doc đó (đối chiếu docs provider, số migration thật, code đã trôi) và chốt các mục "Đề xuất cần chốt" (Đ-*) với user. Không code thẳng từ doc khung chưa refresh.
 
 ## 3. Nguyên tắc kỹ thuật (SOLID + Clean Architecture — BẮT BUỘC)
 
