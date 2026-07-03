@@ -70,6 +70,9 @@ app:
   mail:
     from: ${RESEND_FROM_EMAIL:onboarding@resend.dev}
     verification-token-expiration: 600000  # OTP hiệu lực 10 phút (ms)
+  ops:
+    # Nhận email P0 (reconcile lệch tiền — money-core §4). Để trống = chỉ log ERROR (dev).
+    admin-email: ${ADMIN_ALERT_EMAIL:}
 
 ---
 # Profile PROD (Docker/VPS): tắt log SQL cho gọn log & đỡ tốn I/O.

@@ -22,12 +22,15 @@ public class ResendEmailService implements EmailService {
     private final RestClient restClient;
     private final String apiKey;
     private final String from;
+    private final String adminEmail;
 
     public ResendEmailService(
             @Value("${resend.api-key}") String apiKey,
-            @Value("${app.mail.from}") String from) {
+            @Value("${app.mail.from}") String from,
+            @Value("${app.ops.admin-email:}") String adminEmail) {
         this.apiKey = apiKey;
         this.from = from;
+        this.adminEmail = adminEmail;
         this.restClient = RestClient.create();
     }
 
@@ -84,6 +87,36 @@ public class ResendEmailService implements EmailService {
             log.info("Sent verification email to {}", toEmail);
         } catch (Exception ex) {
             log.warn("Failed to send verification email to {}: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    @Override
+    public void sendOpsAlert(String subject, String body) {
+        if (adminEmail == null || adminEmail.isBlank()) {
+            // Không có nơi nhận thì ít nhất phải gào to trong log — đây là P0.
+            log.error("OPS ALERT NOT DELIVERED (app.ops.admin-email chưa cấu hình): {}\n{}", subject, body);
+            return;
+        }
+        // Nội dung kỹ thuật cho admin — <pre> giữ nguyên xuống dòng, khỏi cần template đẹp.
+        String html = "<pre style=\"font-family:monospace;font-size:13px;\">"
+                + body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                + "</pre>";
+        try {
+            restClient.post()
+                    .uri(RESEND_ENDPOINT)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "from", from,
+                            "to", List.of(adminEmail),
+                            "subject", subject,
+                            "html", html))
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("Sent ops alert to {}: {}", adminEmail, subject);
+        } catch (Exception ex) {
+            // Job gọi không được chết vì mail — nhưng lỗi này bản thân nó cũng đáng ERROR.
+            log.error("Failed to send ops alert '{}' to {}: {}", subject, adminEmail, ex.getMessage());
         }
     }
 }
