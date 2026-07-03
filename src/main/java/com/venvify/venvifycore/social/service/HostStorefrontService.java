@@ -38,7 +38,7 @@ public class HostStorefrontService {
                 host.getAvatarUrl(),
                 host.getBio(),
                 followRepository.countByHostId(host.getId()),
-                reviewRepository.countByHostId(host.getId()),
+                reviewRepository.countByHostIdAndHiddenFalse(host.getId()),
                 reviewRepository.averageRatingByHostId(host.getId()),
                 eventDiscoveryService.countUpcomingByHost(host.getId()));
     }

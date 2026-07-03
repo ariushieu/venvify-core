@@ -162,6 +162,13 @@ public class BookingService {
         return bookingMapper.toResponse(bookingRepository.save(booking));
     }
 
+    /** Điều kiện review P6 §2 — chỉ người THẬT SỰ tham dự (data attendance từ P4). */
+    @Transactional(readOnly = true)
+    public boolean hasAttended(Long eventId, Long attendeeId) {
+        return bookingRepository.existsByEventIdAndAttendeeIdAndStatusIn(
+                eventId, attendeeId, List.of(BookingStatus.ATTENDED));
+    }
+
     /**
      * Attendee cần báo khi event bị hủy: vé paid đã thành REFUNDED (escrow hoàn xong),
      * vé free vẫn CONFIRMED. Đọc cho NotificationListener (master §2 amend 2026-07-04).

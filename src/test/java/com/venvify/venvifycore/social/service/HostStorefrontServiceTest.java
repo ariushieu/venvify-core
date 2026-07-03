@@ -59,7 +59,7 @@ class HostStorefrontServiceTest {
     @Test
     void getStorefront_aggregatesCounts() {
         when(followRepository.countByHostId(7L)).thenReturn(12L);
-        when(reviewRepository.countByHostId(7L)).thenReturn(5L);
+        when(reviewRepository.countByHostIdAndHiddenFalse(7L)).thenReturn(5L);
         when(reviewRepository.averageRatingByHostId(7L)).thenReturn(4.4);
         when(eventDiscoveryService.countUpcomingByHost(7L)).thenReturn(3L);
 

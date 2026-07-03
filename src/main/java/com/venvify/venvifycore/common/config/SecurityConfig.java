@@ -63,10 +63,10 @@ public class SecurityConfig {
                         // Khách vãng lai duyệt event công khai. /events/mine phải đặt TRƯỚC vì
                         // pattern /events/* cũng khớp "mine" — matcher xét theo thứ tự, khớp đầu thắng.
                         .requestMatchers(HttpMethod.GET, "/events/mine").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/events", "/events/*").permitAll()
-                        // Storefront host public (P3 §2.4): profile + tab events. Follow (PUT/DELETE)
-                        // và các path khác dưới /hosts vẫn rơi xuống authenticated.
-                        .requestMatchers(HttpMethod.GET, "/hosts/*", "/hosts/*/events").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/events", "/events/*", "/events/*/reviews").permitAll()
+                        // Storefront host public (P3 §2.4 + P6 review): profile + tab events + reviews.
+                        // Follow (PUT/DELETE) và các path khác dưới /hosts vẫn rơi xuống authenticated.
+                        .requestMatchers(HttpMethod.GET, "/hosts/*", "/hosts/*/events", "/hosts/*/reviews").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)

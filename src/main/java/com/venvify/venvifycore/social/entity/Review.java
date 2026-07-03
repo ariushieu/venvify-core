@@ -52,4 +52,9 @@ public class Review extends BaseEntity {
 
     @Column(name = "comment", columnDefinition = "TEXT")
     private String comment;
+
+    /** Moderation (P6 §2): admin hide/unhide; hidden loại khỏi mọi listing/avg public. */
+    @Column(name = "hidden", nullable = false)
+    @Builder.Default
+    private boolean hidden = false;
 }

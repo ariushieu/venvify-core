@@ -174,6 +174,12 @@ public class EventService {
         return eventMapper.toResponse(event);
     }
 
+    /** Lookup entity cho module khác (social review…) — 404 nếu không có/đã xóa. */
+    @Transactional(readOnly = true)
+    public Event loadByPublicId(String eventPublicId) {
+        return requireExistingEvent(eventPublicId);
+    }
+
     /** Đọc cho NotificationListener (master §2 amend 2026-07-04) — fetch join host, không lazy leak. */
     @Transactional(readOnly = true)
     public Event loadWithHost(Long eventId) {
