@@ -4,6 +4,8 @@ import com.venvify.venvifycore.common.dto.PagedResponse;
 import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ForbiddenException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
+import com.venvify.venvifycore.event.domain.EventCancelledEvent;
+import com.venvify.venvifycore.event.domain.EventPublishedEvent;
 import com.venvify.venvifycore.event.dto.CreateEventRequest;
 import com.venvify.venvifycore.event.dto.EventResponse;
 import com.venvify.venvifycore.event.dto.UpdateEventRequest;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +56,8 @@ class EventServiceTest {
     private UserRepository userRepository;
     @Mock
     private EscrowService escrowService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private EventService eventService;
@@ -289,6 +294,8 @@ class EventServiceTest {
         assertThat(draft.getStatus()).isEqualTo(EventStatus.PUBLISHED);
         assertThat(owner.getRoles()).contains(Role.HOST);
         verify(userRepository).save(owner);
+        // Domain event cho fan-out follower (P6) — listener chạy AFTER_COMMIT.
+        verify(eventPublisher).publishEvent(any(EventPublishedEvent.class));
     }
 
     @Test
@@ -322,6 +329,8 @@ class EventServiceTest {
         assertThat(published.getStatus()).isEqualTo(EventStatus.CANCELLED);
         // Money-core §3.3: hủy event là luồng refund DUY NHẤT cho vé paid.
         verify(escrowService).refundHeldForEvent(published);
+        // Domain event: booking hủy transfer PENDING (P3 §1.4) + notification (P6) sau commit.
+        verify(eventPublisher).publishEvent(any(EventCancelledEvent.class));
     }
 
     @Test

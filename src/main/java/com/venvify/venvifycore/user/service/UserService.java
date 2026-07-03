@@ -1,5 +1,6 @@
 package com.venvify.venvifycore.user.service;
 
+import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.enums.UserStatus;
@@ -33,5 +34,24 @@ public class UserService {
     public User getByPublicId(String publicId) {
         return userRepository.findByPublicId(publicId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+    /**
+     * Resolve user ACTIVE theo ĐÚNG MỘT trong hai định danh — email hoặc host handle
+     * (R4 transfer: người nhận phải là user đã đăng ký). Message 404 cố ý chung chung:
+     * không dùng làm kênh dò email tồn tại kèm trạng thái tài khoản.
+     */
+    @Transactional(readOnly = true)
+    public User resolveActiveByEmailOrHandle(String email, String handle) {
+        boolean byEmail = email != null && !email.isBlank();
+        boolean byHandle = handle != null && !handle.isBlank();
+        if (byEmail == byHandle) {
+            throw new BadRequestException("Provide exactly one of email or handle");
+        }
+        var found = byEmail
+                ? userRepository.findByEmailAndDeletedFalse(email.trim().toLowerCase())
+                : userRepository.findByHostHandleAndDeletedFalse(handle.trim());
+        return found.filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Receiver not found"));
     }
 }

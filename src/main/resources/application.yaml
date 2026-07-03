@@ -58,6 +58,10 @@ app:
     ticket-commission-percent: 5      # O-M1: phí platform, floor khi chia (R17); đổi không cần migration
     escrow-release-delay-days: 3      # O-M3: dispute window sau khi event ENDED mới release escrow
     dev-topup-enabled: false          # bật tay ở local để test paid flow; prod LUÔN tắt bất kể flag (R16)
+    resale-commission-percent: 0      # O1 (P3): phí resale 0% MVP — bật sau chỉ đổi số, code đi postSplit sẵn
+  booking:
+    transfer-max-hops: 1              # O2 (P3): mỗi vé pass tối đa 1 lần — chống rửa vé lòng vòng
+    transfer-expiry-hours: 72         # TTL offer chuyển nhượng; quá hạn job đánh EXPIRED
   auth:
     # T6: chống brute-force login — khóa account sau N lần sai trong cửa sổ lockout.
     # Response vẫn 401 generic, không lộ trạng thái khóa.

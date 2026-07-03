@@ -5,6 +5,8 @@ import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ForbiddenException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
 import com.venvify.venvifycore.common.util.SlugGenerator;
+import com.venvify.venvifycore.event.domain.EventCancelledEvent;
+import com.venvify.venvifycore.event.domain.EventPublishedEvent;
 import com.venvify.venvifycore.event.dto.CreateEventRequest;
 import com.venvify.venvifycore.event.dto.EventResponse;
 import com.venvify.venvifycore.event.dto.UpdateEventRequest;
@@ -18,6 +20,7 @@ import com.venvify.venvifycore.user.enums.Role;
 import com.venvify.venvifycore.user.repository.UserRepository;
 import com.venvify.venvifycore.wallet.service.EscrowService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,7 @@ public class EventService {
     private final EventMapper eventMapper;
     private final UserRepository userRepository;
     private final EscrowService escrowService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** Tạo event DRAFT. Chưa cấp HOST ở đây — role được cấp khi publish lần đầu (plan §1 E1, E4). */
     @Transactional
@@ -105,7 +109,10 @@ public class EventService {
             userRepository.save(host);
         }
 
-        return eventMapper.toResponse(eventRepository.save(event));
+        Event saved = eventRepository.save(event);
+        // Publish TRONG tx — listener AFTER_COMMIT (P6 fan-out follower) chỉ chạy khi commit thật.
+        eventPublisher.publishEvent(new EventPublishedEvent(saved.getId()));
+        return eventMapper.toResponse(saved);
     }
 
     /**
@@ -126,6 +133,9 @@ public class EventService {
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         locked.setStatus(EventStatus.CANCELLED);
         escrowService.refundHeldForEvent(locked);
+
+        // AFTER_COMMIT: booking hủy transfer PENDING (P3 §1.4), notification attendee (P6).
+        eventPublisher.publishEvent(new EventCancelledEvent(locked.getId()));
 
         // MVP chạy đồng bộ trong cùng tx — event nghìn vé thì chuyển job async (ghi chú plan §3.3).
         return eventMapper.toResponse(eventRepository.save(locked));

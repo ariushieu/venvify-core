@@ -190,6 +190,7 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 |---|---|---|---|
 | Escrow release (auto-end + release sau delay 3d) | theo plan money-core §3.4 (mỗi giờ, phút lệch 0/30) | P1 | state check dưới lock |
 | Reconcile ledger (4 bất biến) | 03:17 hằng ngày | P1 | chỉ đọc; lệch = P0 → email admin NGAY (§9) |
+| Transfer expiry (offer PENDING quá 72h → EXPIRED) | mỗi 15' (lệch pha escrow job) | P3 ✅ | re-check status trong tx + @Version |
 | Booking hold expiry (nhả slot RESERVED quá hạn) | mỗi 1' | P2 | status check dưới lock |
 | Payment intent expiry | mỗi 5' | P2 | status |
 | Reminder T-24h / T-1h | mỗi 5' | P2 | `UNIQUE(event_id, kind)` |
