@@ -69,4 +69,8 @@ public class Transaction extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id")
     private Event event;
+
+    /** Thời điểm chốt SUCCESS/FAILED (F4) — audit, phân biệt với created_at lúc khởi tạo. */
+    @Column(name = "completed_at")
+    private Instant completedAt;
 }

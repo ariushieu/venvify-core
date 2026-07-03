@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.wallet.repository;
 
 import com.venvify.venvifycore.wallet.entity.Wallet;
+import com.venvify.venvifycore.wallet.enums.WalletAccountType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -14,6 +15,9 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     Optional<Wallet> findByPublicId(String publicId);
 
     Optional<Wallet> findByUserId(Long userId);
+
+    /** Lấy hũ hệ thống theo loại (F7) — mỗi loại đúng 1 dòng, seed ở V2. */
+    Optional<Wallet> findByAccountType(WalletAccountType accountType);
 
     /** Khóa row ví khi trừ/cộng tiền để chống race condition (SPEC §5.6). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

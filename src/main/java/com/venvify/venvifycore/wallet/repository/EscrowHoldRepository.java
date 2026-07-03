@@ -11,7 +11,12 @@ public interface EscrowHoldRepository extends JpaRepository<EscrowHold, Long> {
 
     Optional<EscrowHold> findByPublicId(String publicId);
 
-    Optional<EscrowHold> findByBookingId(Long bookingId);
+    /**
+     * Tra hold theo booking + status (F6). KHÔNG dùng findByBookingId trần: booking refund xong
+     * mua lại sẽ có 2 hold (REFUNDED + HELD) → Optional nổ. Service đảm bảo ≤ 1 hold HELD/booking
+     * (guard dưới khóa event).
+     */
+    Optional<EscrowHold> findByBookingIdAndStatus(Long bookingId, EscrowStatus status);
 
     List<EscrowHold> findByEventIdAndStatus(Long eventId, EscrowStatus status);
 }

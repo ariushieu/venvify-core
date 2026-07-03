@@ -9,7 +9,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> {
 
-    Page<LedgerEntry> findByWalletIdOrderByCreatedAtDesc(Long walletId, Pageable pageable);
+    /** Sao kê sort theo id (R15/F5) — created_at có thể tie trong cùng micro giây; id thì không
+     *  (insert tuần tự dưới khóa ví). */
+    Page<LedgerEntry> findByWalletIdOrderByIdDesc(Long walletId, Pageable pageable);
 
     /** Nguồn sự thật của số dư — dùng để reconcile với wallets.balance_cached (D2). */
     @Query("select coalesce(sum(l.amount), 0) from LedgerEntry l where l.wallet.id = :walletId")

@@ -66,4 +66,11 @@ public class EscrowHold extends BaseEntity {
 
     @Column(name = "released_at")
     private Instant releasedAt;
+
+    /** Mốc audit các nhánh còn lại của state machine (F4). */
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
+    @Column(name = "paid_out_at")
+    private Instant paidOutAt;
 }

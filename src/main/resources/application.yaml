@@ -27,6 +27,11 @@ spring:
           # T1 (architecture §15): UTC toàn tuyến — DB lưu UTC, client tự render giờ treo tường
           # theo events.timezone. Đổi múi giờ hiển thị là việc của FE, không phải của storage.
           time_zone: UTC
+        type:
+          # Enum policy (architecture §6, V5): @Enumerated(STRING) map sang VARCHAR thay vì
+          # ENUM MySQL native — thêm giá trị enum không cần DDL. Phải khớp với schema sau V5,
+          # nếu không ddl-auto: validate sẽ fail.
+          preferred_enum_jdbc_type: VARCHAR
 
   flyway:
     enabled: true

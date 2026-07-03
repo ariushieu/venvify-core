@@ -5,5 +5,7 @@ public enum TransactionType {
     TICKET_PURCHASE,
     REFUND,
     PAYOUT,
-    COMMISSION
+    COMMISSION,
+    /** Bút toán đảo sửa sai sự cố (F3) — công cụ vận hành, chưa có endpoint tạo. */
+    REVERSAL
 }

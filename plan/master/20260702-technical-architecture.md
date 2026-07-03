@@ -150,19 +150,20 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 
 - **⚠ Time policy (T1 §15):** hiện `hibernate.jdbc.time_zone` + `jackson.time-zone` = `Asia/Ho_Chi_Minh` trong khi MySQL container chạy `+00:00` và ERD tuyên bố UTC. Chuẩn hóa **UTC toàn tuyến** (đổi 2 dòng config) ở đầu P1 code, khi DB chưa có data thật — để sau này là một cuộc migrate data đau đớn.
 - **Flyway RULE:** file đã applied là bất biến · naming `V{n}__{snake_case}.sql` · mỗi slice một file · prod migrate luôn có backup trước (§10).
-- **Migration ledger** (số từ V5 là dự kiến, chốt lúc code):
+- **Migration ledger** (số từ V6 là dự kiến, chốt lúc code — đánh lại 2026-07-03: V4 bị email-OTP chiếm nên money-core dồn xuống V5, các số sau +1):
 
 | V | Nội dung | Trạng thái |
 |---|---|---|
 | V1 | init schema (Hibernate export) | ✅ đóng băng |
 | V2 | event time D13 + wallet account_type + seed 4 hũ hệ thống | ✅ |
 | V3 | auth tokens (refresh, email verification) | ✅ |
-| V4 | money-core: triggers append-only, CHECKs, **convert mọi cột enum → VARCHAR(30)**, +REVERSAL, completed_at/refunded_at/paid_out_at | 📐 plan đã duyệt (amend 2026-07-02) |
-| V5 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until (giá trị enum mới: không cần DDL) | 📐 |
-| V6 (P3) | ticket_transfers, bookings.transfer_count, FULLTEXT index events | 📐 |
-| V7 (P4) | room_attendances, events.recording_enabled, recordings.audio_url, chat moderation cols | 📐 |
-| V8 (P5) | ai_jobs | 📐 |
-| V9 (P6) | audit_logs, reviews.hidden | 📐 |
+| V4 | email OTP (đổi verify link → mã 6 số; ngoài kế hoạch ledger cũ) | ✅ |
+| V5 | money-core: triggers append-only, CHECKs, **convert mọi cột enum → VARCHAR(30)**, completed_at/refunded_at/paid_out_at (+REVERSAL là hằng Java, sau convert không cần DDL) | ✅ code 2026-07-03 |
+| V6 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until (giá trị enum mới: không cần DDL) | 📐 |
+| V7 (P3) | ticket_transfers, bookings.transfer_count, FULLTEXT index events | 📐 |
+| V8 (P4) | room_attendances, events.recording_enabled, recordings.audio_url, chat moderation cols | 📐 |
+| V9 (P5) | ai_jobs | 📐 |
+| V10 (P6) | audit_logs, reviews.hidden | 📐 |
 
 - Index policy: FK tự có index (InnoDB); composite cho query nóng khai ở entity ✅; detail plan của query list mới phải nêu index nó dùng; EXPLAIN các query discover trước khi ship P3.
 
