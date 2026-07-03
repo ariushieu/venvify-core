@@ -17,6 +17,7 @@ import com.venvify.venvifycore.common.util.UuidV7;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.enums.Role;
 import com.venvify.venvifycore.user.repository.UserRepository;
+import com.venvify.venvifycore.wallet.service.EscrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +37,7 @@ public class EventService {
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
     private final UserRepository userRepository;
+    private final EscrowService escrowService;
 
     /** Tạo event DRAFT. Chưa cấp HOST ở đây — role được cấp khi publish lần đầu (plan §1 E1, E4). */
     @Transactional
@@ -107,7 +109,12 @@ public class EventService {
         return eventMapper.toResponse(eventRepository.save(event));
     }
 
-    /** Huỷ event (DRAFT hoặc PUBLISHED). Booking đã có giữ nguyên ở slice này (free, chưa có tiền). */
+    /**
+     * Huỷ event (DRAFT hoặc PUBLISHED). Vé PAID: hoàn 100% từ escrow về từng buyer, booking →
+     * REFUNDED (money-core §3.3 — luồng refund DUY NHẤT). Vé free giữ nguyên CONFIRMED.
+     * Khóa row event trước khi hủy để serialize với luồng mua vé (cũng khóa event — R13):
+     * không có purchase nào "đang bay" chen vào giữa refund và đổi status.
+     */
     @Transactional
     public EventResponse cancel(String userPublicId, String eventPublicId) {
         Event event = requireOwnedEvent(userPublicId, eventPublicId);
@@ -116,8 +123,13 @@ public class EventService {
             throw new BadRequestException("Only draft or published events can be cancelled");
         }
 
-        event.setStatus(EventStatus.CANCELLED);
-        return eventMapper.toResponse(eventRepository.save(event));
+        Event locked = eventRepository.findByIdForUpdate(event.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        locked.setStatus(EventStatus.CANCELLED);
+        escrowService.refundHeldForEvent(locked);
+
+        // MVP chạy đồng bộ trong cùng tx — event nghìn vé thì chuyển job async (ghi chú plan §3.3).
+        return eventMapper.toResponse(eventRepository.save(locked));
     }
 
     /** Soft delete (plan §2): chỉ cho phép với DRAFT hoặc CANCELLED. */

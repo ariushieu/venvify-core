@@ -17,6 +17,7 @@ import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.enums.Role;
 import com.venvify.venvifycore.user.enums.UserStatus;
 import com.venvify.venvifycore.user.repository.UserRepository;
+import com.venvify.venvifycore.wallet.service.EscrowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,8 @@ class EventServiceTest {
     private EventMapper eventMapper;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private EscrowService escrowService;
 
     @InjectMocks
     private EventService eventService;
@@ -307,15 +310,18 @@ class EventServiceTest {
     // ---- cancel / delete ----
 
     @Test
-    void cancel_publishedEvent_setsCancelled() {
+    void cancel_publishedEvent_setsCancelledAndRefundsEscrow() {
         Event published = event(EventStatus.PUBLISHED);
         when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(published));
+        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(published));
         when(eventRepository.save(published)).thenReturn(published);
         when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
 
         eventService.cancel(OWNER_PID, "evt-pid");
 
         assertThat(published.getStatus()).isEqualTo(EventStatus.CANCELLED);
+        // Money-core §3.3: hủy event là luồng refund DUY NHẤT cho vé paid.
+        verify(escrowService).refundHeldForEvent(published);
     }
 
     @Test
@@ -324,6 +330,7 @@ class EventServiceTest {
 
         assertThatThrownBy(() -> eventService.cancel(OWNER_PID, "evt-pid"))
                 .isInstanceOf(BadRequestException.class);
+        verify(escrowService, never()).refundHeldForEvent(any());
     }
 
     @Test

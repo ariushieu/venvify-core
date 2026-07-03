@@ -17,6 +17,8 @@ import com.venvify.venvifycore.event.repository.EventRepository;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.enums.UserStatus;
 import com.venvify.venvifycore.user.repository.UserRepository;
+import com.venvify.venvifycore.wallet.entity.Transaction;
+import com.venvify.venvifycore.wallet.service.EscrowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +56,8 @@ class BookingServiceTest {
     private UserRepository userRepository;
     @Mock
     private BookingMapper bookingMapper;
+    @Mock
+    private EscrowService escrowService;
 
     @InjectMocks
     private BookingService bookingService;
@@ -166,16 +170,64 @@ class BookingServiceTest {
     }
 
     @Test
-    void create_paidEvent_throwsBadRequest() {
-        Event event = event(EventStatus.PUBLISHED, 50_000L, 10, 0);
+    void create_paidEvent_chargesWalletAndLinksPurchaseTransaction() {
+        Event event = event(EventStatus.PUBLISHED, 50_000L, 10, 3);
+        Transaction purchase = Transaction.builder().transactionRef("TKT-abc").build();
         CreateBookingRequest request = new CreateBookingRequest(EVENT_PID);
         when(userRepository.findByPublicId(ATTENDEE_PID)).thenReturn(Optional.of(attendee));
         when(eventRepository.findByPublicId(EVENT_PID)).thenReturn(Optional.of(event));
+        when(bookingRepository.findByEventIdAndAttendeeId(100L, 2L)).thenReturn(Optional.empty());
+        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(event));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(escrowService.holdTicketPayment(any(Booking.class), eq(attendee), eq(50_000L)))
+                .thenReturn(purchase);
+        when(bookingMapper.toResponse(any(Booking.class))).thenReturn(RESPONSE);
 
+        bookingService.create(ATTENDEE_PID, request);
+
+        assertThat(event.getClaimedSlots()).isEqualTo(4);
+        ArgumentCaptor<Booking> captor = ArgumentCaptor.forClass(Booking.class);
+        verify(bookingRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        Booking saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(saved.getPricePaid()).isEqualTo(50_000L);
+        assertThat(saved.getPurchaseTransaction()).isSameAs(purchase);
+        assertThat(saved.getBookedAt()).isNotNull();
+    }
+
+    @Test
+    void create_paidEvent_insufficientBalance_propagatesSoTxRollsBack() {
+        Event event = event(EventStatus.PUBLISHED, 50_000L, 10, 3);
+        CreateBookingRequest request = new CreateBookingRequest(EVENT_PID);
+        when(userRepository.findByPublicId(ATTENDEE_PID)).thenReturn(Optional.of(attendee));
+        when(eventRepository.findByPublicId(EVENT_PID)).thenReturn(Optional.of(event));
+        when(bookingRepository.findByEventIdAndAttendeeId(100L, 2L)).thenReturn(Optional.empty());
+        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(event));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(escrowService.holdTicketPayment(any(Booking.class), eq(attendee), eq(50_000L)))
+                .thenThrow(new BadRequestException("Insufficient wallet balance"));
+
+        // Exception thoát khỏi @Transactional → rollback cả slot đã tăng lẫn booking (money-core §3.1).
         assertThatThrownBy(() -> bookingService.create(ATTENDEE_PID, request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Paid");
-        verify(eventRepository, never()).findByIdForUpdate(anyLong());
+                .hasMessageContaining("Insufficient");
+    }
+
+    @Test
+    void create_eventCancelledBetweenCheckAndLock_throwsBadRequest() {
+        Event event = event(EventStatus.PUBLISHED, 0L, 10, 0);
+        Event lockedCancelled = event(EventStatus.CANCELLED, 0L, 10, 0);
+        CreateBookingRequest request = new CreateBookingRequest(EVENT_PID);
+        when(userRepository.findByPublicId(ATTENDEE_PID)).thenReturn(Optional.of(attendee));
+        when(eventRepository.findByPublicId(EVENT_PID)).thenReturn(Optional.of(event));
+        when(bookingRepository.findByEventIdAndAttendeeId(100L, 2L)).thenReturn(Optional.empty());
+        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(lockedCancelled));
+
+        // Re-check status dưới khóa: event vừa bị hủy thì không được chen booking vào.
+        assertThatThrownBy(() -> bookingService.create(ATTENDEE_PID, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not open");
+        verify(bookingRepository, never()).save(any());
     }
 
     @Test
@@ -299,6 +351,21 @@ class BookingServiceTest {
 
         assertThatThrownBy(() -> bookingService.cancel(HOST_PID, "bk-pid"))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void cancel_paidBooking_isBlocked() {
+        Event event = event(EventStatus.PUBLISHED, 50_000L, 10, 5);
+        Booking b = booking(BookingStatus.CONFIRMED, event);
+        b.setPricePaid(50_000L);
+        when(bookingRepository.findByPublicId("bk-pid")).thenReturn(Optional.of(b));
+
+        // O-M2: vé paid không tự hủy — refund chỉ khi event bị hủy; đường thoát là transfer.
+        assertThatThrownBy(() -> bookingService.cancel(ATTENDEE_PID, "bk-pid"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("transfer");
+        verify(eventRepository, never()).findByIdForUpdate(anyLong());
+        assertThat(b.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
     }
 
     @Test

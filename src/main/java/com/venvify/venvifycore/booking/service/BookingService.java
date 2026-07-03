@@ -16,6 +16,8 @@ import com.venvify.venvifycore.event.enums.EventStatus;
 import com.venvify.venvifycore.event.repository.EventRepository;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.repository.UserRepository;
+import com.venvify.venvifycore.wallet.entity.Transaction;
+import com.venvify.venvifycore.wallet.service.EscrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 
 /**
- * Nghiệp vụ đặt vé (plan §3). Slice này chỉ phục vụ event FREE → CONFIRMED ngay;
- * event có phí trả 400 (mua qua ví là slice sau). Chống oversell bằng khóa row event (D4).
+ * Nghiệp vụ đặt vé (plan §3; money-core §3.1–3.2). Event FREE → CONFIRMED ngay; event có phí
+ * mua bằng ví — trừ tiền NGAY, giữ vào escrow (đường Sepay QR/RESERVED là slice sau).
+ * Chống oversell bằng khóa row event (D4).
  */
 @Service
 @RequiredArgsConstructor
@@ -36,8 +39,13 @@ public class BookingService {
     private final EventRepository eventRepository;
     private final UserRepository userRepository;
     private final BookingMapper bookingMapper;
+    private final EscrowService escrowService;
 
-    /** Đặt vé FREE: kiểm tra mở bán, trùng vé, hết chỗ; tăng claimed_slots dưới khóa row (plan §3.1). */
+    /**
+     * Đặt vé: kiểm tra mở bán, trùng vé, hết chỗ; tăng claimed_slots dưới khóa row (plan §3.1).
+     * Event có phí: trừ ví NGAY qua escrow (money-core §3.1) — thiếu tiền → exception → rollback
+     * cả slot. Thứ tự khóa R13: event trước → ví sau (trong LedgerService, id tăng dần).
+     */
     @Transactional
     public BookingResponse create(String userPublicId, CreateBookingRequest request) {
         User attendee = requireUser(userPublicId);
@@ -52,35 +60,48 @@ public class BookingService {
         if (event.getHost().getId().equals(attendee.getId())) {
             throw new BadRequestException("You cannot book your own event");
         }
-        if (event.getPriceAmount() != null && event.getPriceAmount() > 0) {
-            throw new BadRequestException("Paid bookings are not supported yet");
-        }
 
         Booking existing = bookingRepository
                 .findByEventIdAndAttendeeId(event.getId(), attendee.getId())
                 .orElse(null);
         if (existing != null && existing.getStatus() != BookingStatus.CANCELLED) {
+            // Gồm cả REFUNDED: event đã hủy thì không mua lại được (Đ-P2.6).
             throw new ConflictException("You have already booked this event");
         }
 
         // Khóa row event để cập nhật claimed_slots an toàn khi nhiều người đặt cùng lúc (D4).
         Event locked = eventRepository.findByIdForUpdate(event.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        if (locked.getStatus() != EventStatus.PUBLISHED) {
+            // Re-check dưới khóa: event có thể vừa bị hủy giữa lúc check ở trên và lúc khóa —
+            // nếu lọt qua, tiền sẽ vào escrow của event chết mà không ai refund.
+            throw new BadRequestException("Event is not open for booking");
+        }
         if (locked.getClaimedSlots() >= locked.getMaxSlots()) {
             throw new BadRequestException("Event is sold out");
         }
         locked.setClaimedSlots(locked.getClaimedSlots() + 1);
         eventRepository.save(locked);
 
+        long price = locked.getPriceAmount() == null ? 0L : locked.getPriceAmount();
+
         Booking booking = existing != null ? existing : Booking.builder()
                 .event(locked)
                 .attendee(attendee)
                 .build();
         booking.setStatus(BookingStatus.CONFIRMED);
-        booking.setPricePaid(0L);
+        booking.setPricePaid(price);
         booking.setBookedAt(Instant.now());
+        booking = bookingRepository.save(booking);
 
-        return bookingMapper.toResponse(bookingRepository.save(booking));
+        if (price > 0) {
+            // Booking đã persist (hold cần FK); thiếu tiền → BadRequest → rollback cả slot lẫn booking.
+            Transaction purchase = escrowService.holdTicketPayment(booking, attendee, price);
+            booking.setPurchaseTransaction(purchase);
+            booking = bookingRepository.save(booking);
+        }
+
+        return bookingMapper.toResponse(booking);
     }
 
     /** Vé của user đang đăng nhập. */
@@ -105,7 +126,11 @@ public class BookingService {
         return bookingMapper.toResponse(booking);
     }
 
-    /** Huỷ vé trước giờ bắt đầu; trả lại slot dưới khóa row (plan §3). Chỉ attendee tự huỷ. */
+    /**
+     * Huỷ vé FREE trước giờ bắt đầu; trả lại slot dưới khóa row (plan §3). Chỉ attendee tự huỷ.
+     * Vé PAID không tự huỷ được (O-M2): refund chỉ khi event bị hủy; không đi được → pass vé
+     * (transfer — slice sau). Bảo vệ host khỏi huỷ hàng loạt sát giờ + đơn giản hóa kế toán.
+     */
     @Transactional
     public BookingResponse cancel(String userPublicId, String bookingPublicId) {
         Booking booking = requireBooking(bookingPublicId);
@@ -115,6 +140,9 @@ public class BookingService {
         }
         if (booking.getStatus() != BookingStatus.RESERVED && booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new BadRequestException("Booking cannot be cancelled");
+        }
+        if (booking.getPricePaid() != null && booking.getPricePaid() > 0) {
+            throw new BadRequestException("Paid bookings cannot be cancelled — transfer your ticket instead");
         }
 
         Instant startTime = booking.getEvent().getStartTime();
