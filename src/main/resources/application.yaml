@@ -24,7 +24,9 @@ spring:
       hibernate:
         format_sql: true
         jdbc:
-          time_zone: Asia/Ho_Chi_Minh
+          # T1 (architecture §15): UTC toàn tuyến — DB lưu UTC, client tự render giờ treo tường
+          # theo events.timezone. Đổi múi giờ hiển thị là việc của FE, không phải của storage.
+          time_zone: UTC
 
   flyway:
     enabled: true
@@ -32,7 +34,7 @@ spring:
     locations: classpath:db/migration
 
   jackson:
-    time-zone: Asia/Ho_Chi_Minh
+    time-zone: UTC  # T1: JSON timestamps ISO-8601 UTC (khớp hibernate.jdbc.time_zone)
 
 logging:
   config: classpath:log4j2.xml
