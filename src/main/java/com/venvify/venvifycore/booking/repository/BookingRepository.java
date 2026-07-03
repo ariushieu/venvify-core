@@ -39,4 +39,20 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     /** Attendee cần báo khi event bị hủy (notification listener) — fetch sẵn người + event. */
     @EntityGraph(attributePaths = {"attendee", "event"})
     List<Booking> findByEventIdAndStatusIn(Long eventId, Collection<BookingStatus> statuses);
+
+    // ---- host analytics (P6 §5 — thuần SELECT) ----
+
+    @Query("select b.status as status, count(b) as total from Booking b where b.event.id = :eventId group by b.status")
+    List<StatusCount> countByStatusGroupedForEvent(@Param("eventId") Long eventId);
+
+    interface StatusCount {
+        BookingStatus getStatus();
+
+        long getTotal();
+    }
+
+    /** Tổng attendee mọi event của host (vé đang sống: CONFIRMED/ATTENDED). */
+    @Query("select count(b) from Booking b where b.event.host.id = :hostId and b.status in :statuses")
+    long countForHostByStatuses(@Param("hostId") Long hostId,
+                                @Param("statuses") Collection<BookingStatus> statuses);
 }

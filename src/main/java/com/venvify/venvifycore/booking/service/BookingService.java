@@ -25,7 +25,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Nghiệp vụ đặt vé (plan §3; money-core §3.1–3.2). Event FREE → CONFIRMED ngay; event có phí
@@ -167,6 +169,23 @@ public class BookingService {
     public boolean hasAttended(Long eventId, Long attendeeId) {
         return bookingRepository.existsByEventIdAndAttendeeIdAndStatusIn(
                 eventId, attendeeId, List.of(BookingStatus.ATTENDED));
+    }
+
+    // ---- host analytics (P6 §5 — đọc-only) ----
+
+    @Transactional(readOnly = true)
+    public Map<BookingStatus, Long> countsByStatusForEvent(Long eventId) {
+        Map<BookingStatus, Long> counts = new EnumMap<>(BookingStatus.class);
+        bookingRepository.countByStatusGroupedForEvent(eventId)
+                .forEach(row -> counts.put(row.getStatus(), row.getTotal()));
+        return counts;
+    }
+
+    /** Tổng attendee đang giữ vé sống (CONFIRMED/ATTENDED) trên mọi event của host. */
+    @Transactional(readOnly = true)
+    public long countAttendeesForHost(Long hostId) {
+        return bookingRepository.countForHostByStatuses(hostId,
+                List.of(BookingStatus.CONFIRMED, BookingStatus.ATTENDED));
     }
 
     /**

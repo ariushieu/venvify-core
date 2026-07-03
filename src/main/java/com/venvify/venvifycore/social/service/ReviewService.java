@@ -101,6 +101,12 @@ public class ReviewService {
                 .map(r -> toResponse(r, true)));
     }
 
+    /** Rating trung bình public (đã loại hidden) — analytics P6 §5. */
+    @Transactional(readOnly = true)
+    public double averageRatingForHost(Long hostId) {
+        return reviewRepository.averageRatingByHostId(hostId);
+    }
+
     /**
      * Moderation (P6 §2/§4) — CHỈ AdminModerationService gọi (bọc quyền ADMIN + audit cùng tx).
      * Idempotent: set trạng thái đích, không toggle.

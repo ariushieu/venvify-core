@@ -76,6 +76,12 @@ public class FollowService {
         return followRepository.findFollowerIdsByHostId(hostId);
     }
 
+    /** Đếm follower cho storefront/analytics. */
+    @Transactional(readOnly = true)
+    public long countFollowers(Long hostId) {
+        return followRepository.countByHostId(hostId);
+    }
+
     /** Follower đầy đủ (email/tên) cho fan-out email — CHỈ gọi khi count ≤ cap (P6 §1). */
     @Transactional(readOnly = true)
     public List<User> listFollowers(Long hostId) {

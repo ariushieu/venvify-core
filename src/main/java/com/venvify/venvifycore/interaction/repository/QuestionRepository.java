@@ -12,4 +12,7 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     Optional<Question> findByPublicId(String publicId);
 
     Page<Question> findByRoomIdOrderByUpvoteCountDesc(Long roomId, Pageable pageable);
+
+    /** Host analytics (P6 §5) — số câu Q&A của event. */
+    long countByRoomEventId(Long eventId);
 }

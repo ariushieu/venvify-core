@@ -5,9 +5,11 @@ import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.wallet.dto.TransactionAdminResponse;
 import com.venvify.venvifycore.wallet.entity.Transaction;
 import com.venvify.venvifycore.wallet.entity.Wallet;
+import com.venvify.venvifycore.wallet.enums.EscrowStatus;
 import com.venvify.venvifycore.wallet.enums.TransactionStatus;
 import com.venvify.venvifycore.wallet.enums.TransactionType;
 import com.venvify.venvifycore.wallet.enums.WalletAccountType;
+import com.venvify.venvifycore.wallet.repository.EscrowHoldRepository;
 import com.venvify.venvifycore.wallet.repository.TransactionRepository;
 import com.venvify.venvifycore.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ public class TransactionQueryService {
 
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
+    private final EscrowHoldRepository escrowHoldRepository;
 
     @Transactional(readOnly = true)
     public PagedResponse<TransactionAdminResponse> adminSearch(String ref, TransactionType type,
@@ -59,6 +62,26 @@ public class TransactionQueryService {
         return walletRepository.findByAccountType(type)
                 .map(Wallet::getBalanceCached)
                 .orElseThrow(() -> new IllegalStateException("System wallet missing: " + type));
+    }
+
+    // ---- host analytics (P6 §5) ----
+
+    /** Doanh thu host đã THẬT SỰ về ví (escrow RELEASED, phần host_net). */
+    @Transactional(readOnly = true)
+    public long releasedHostNetForHost(Long hostId) {
+        return escrowHoldRepository.sumHostNetByHostAndStatus(hostId, EscrowStatus.RELEASED);
+    }
+
+    /** Doanh thu 1 event: gross đã bán (HELD + RELEASED — không tính refund) + net đã release. */
+    @Transactional(readOnly = true)
+    public EventRevenue revenueForEvent(Long eventId) {
+        long gross = escrowHoldRepository.sumGrossByEventAndStatuses(
+                eventId, List.of(EscrowStatus.HELD, EscrowStatus.RELEASED));
+        long netReleased = escrowHoldRepository.sumHostNetByEventAndStatus(eventId, EscrowStatus.RELEASED);
+        return new EventRevenue(gross, netReleased);
+    }
+
+    public record EventRevenue(long grossSold, long hostNetReleased) {
     }
 
     // ----- helpers -----

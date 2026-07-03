@@ -211,6 +211,12 @@ public class EventService {
         return counts;
     }
 
+    /** Host analytics (P6 §5) — tổng event chưa xóa của host. */
+    @Transactional(readOnly = true)
+    public long countByHost(Long hostId) {
+        return eventRepository.countByHostIdAndDeletedFalse(hostId);
+    }
+
     /** KPI dashboard — event PUBLISHED bắt đầu trong {@code days} ngày tới. */
     @Transactional(readOnly = true)
     public long countUpcomingWithinDays(int days) {

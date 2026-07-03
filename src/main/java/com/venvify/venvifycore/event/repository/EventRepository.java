@@ -89,6 +89,9 @@ public interface EventRepository extends JpaRepository<Event, Long>, EventSearch
     /** KPI: event sắp diễn ra trong N ngày tới. */
     long countByStatusAndDeletedFalseAndStartTimeBetween(EventStatus status, Instant from, Instant to);
 
+    /** Host analytics (P6 §5). */
+    long countByHostIdAndDeletedFalse(Long hostId);
+
     /** Khóa row event để cập nhật claimed_slots an toàn khi nhiều người claim đồng thời (D4). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from Event e where e.id = :id")

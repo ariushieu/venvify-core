@@ -37,4 +37,21 @@ public interface EscrowHoldRepository extends JpaRepository<EscrowHold, Long> {
     /** Bất biến 4 (reconcile §4): số dư hũ ESCROW phải bằng tổng gross các hold HELD. */
     @Query("select coalesce(sum(h.grossAmount), 0) from EscrowHold h where h.status = :status")
     long sumGrossByStatus(@Param("status") EscrowStatus status);
+
+    // ---- host analytics (P6 §5) ----
+
+    /** Doanh thu host đã THẬT SỰ về ví (release xong) — mọi event của host. */
+    @Query("select coalesce(sum(h.hostNetAmount), 0) from EscrowHold h "
+            + "where h.event.host.id = :hostId and h.status = :status")
+    long sumHostNetByHostAndStatus(@Param("hostId") Long hostId, @Param("status") EscrowStatus status);
+
+    /** Doanh thu gross một event (vé đã bán, chưa/không refund — HELD + RELEASED). */
+    @Query("select coalesce(sum(h.grossAmount), 0) from EscrowHold h "
+            + "where h.event.id = :eventId and h.status in :statuses")
+    long sumGrossByEventAndStatuses(@Param("eventId") Long eventId,
+                                    @Param("statuses") List<EscrowStatus> statuses);
+
+    @Query("select coalesce(sum(h.hostNetAmount), 0) from EscrowHold h "
+            + "where h.event.id = :eventId and h.status = :status")
+    long sumHostNetByEventAndStatus(@Param("eventId") Long eventId, @Param("status") EscrowStatus status);
 }
