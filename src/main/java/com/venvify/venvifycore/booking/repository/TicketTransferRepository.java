@@ -17,6 +17,10 @@ public interface TicketTransferRepository extends JpaRepository<TicketTransfer, 
 
     Optional<TicketTransfer> findByPublicId(String publicId);
 
+    /** Load đủ đồ cho notification listener soạn nội dung — 1 câu, không N+1. */
+    @EntityGraph(attributePaths = {"booking", "booking.event", "fromUser", "toUser"})
+    Optional<TicketTransfer> findWithDetailsById(Long id);
+
     /** R-T1: mỗi booking chỉ 1 offer PENDING — gọi dưới lock booking (index (booking_id, status)). */
     boolean existsByBookingIdAndStatus(Long bookingId, TicketTransferStatus status);
 

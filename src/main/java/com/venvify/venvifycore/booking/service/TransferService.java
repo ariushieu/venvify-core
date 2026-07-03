@@ -258,6 +258,13 @@ public class TransferService {
         }
     }
 
+    /** Đọc cho NotificationListener (master §2 amend 2026-07-04: notification đọc qua service). */
+    @Transactional(readOnly = true)
+    public TicketTransfer loadWithDetails(Long transferId) {
+        return transferRepository.findWithDetailsById(transferId)
+                .orElseThrow(() -> new IllegalStateException("Transfer not found: " + transferId));
+    }
+
     // ----- helpers -----
 
     /** R2 + R3/O3 + trạng thái event — dùng chung cho create (dưới khóa booking) và accept. */

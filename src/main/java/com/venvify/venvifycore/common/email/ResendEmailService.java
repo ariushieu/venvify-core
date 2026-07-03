@@ -3,6 +3,7 @@ package com.venvify.venvifycore.common.email;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -87,6 +88,43 @@ public class ResendEmailService implements EmailService {
             log.info("Sent verification email to {}", toEmail);
         } catch (Exception ex) {
             log.warn("Failed to send verification email to {}: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    @Override
+    @Async("emailExecutor")
+    public void sendNotificationEmail(String toEmail, String subject, String bodyText) {
+        // Text thuần bọc khung tối giản cùng tông "Ink & Spotlight"; escape HTML vì nội dung
+        // có thể chứa title event do user đặt.
+        String safe = bodyText.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\n", "<br>");
+        String html = """
+                <div style="margin:0;padding:32px 16px;background-color:#faf8f5;font-family:Arial,Helvetica,sans-serif;">
+                  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:440px;margin:0 auto;">
+                    <tr><td style="padding:0 4px 14px;">
+                      <span style="font-size:19px;font-weight:700;color:#14110f;letter-spacing:-0.5px;">venvify</span>
+                    </td></tr>
+                    <tr><td style="background-color:#14110f;border-radius:16px;padding:30px 28px;">
+                      <p style="margin:0;font-size:14px;line-height:1.7;color:#f5f1ea;">%s</p>
+                    </td></tr>
+                  </table>
+                </div>
+                """.formatted(safe);
+        try {
+            restClient.post()
+                    .uri(RESEND_ENDPOINT)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "from", from,
+                            "to", List.of(toEmail),
+                            "subject", subject,
+                            "html", html))
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("Sent notification email to {}: {}", toEmail, subject);
+        } catch (Exception ex) {
+            log.warn("Failed to send notification email to {}: {}", toEmail, ex.getMessage());
         }
     }
 

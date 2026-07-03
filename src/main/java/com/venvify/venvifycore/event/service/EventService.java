@@ -174,6 +174,14 @@ public class EventService {
         return eventMapper.toResponse(event);
     }
 
+    /** Đọc cho NotificationListener (master §2 amend 2026-07-04) — fetch join host, không lazy leak. */
+    @Transactional(readOnly = true)
+    public Event loadWithHost(Long eventId) {
+        return eventRepository.findWithHostByIdIn(java.util.List.of(eventId)).stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Event not found: " + eventId));
+    }
+
     // ----- helpers -----
 
     private User requireUser(String userPublicId) {

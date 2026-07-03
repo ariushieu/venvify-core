@@ -49,8 +49,12 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 | interaction | ✔ | ✔ | | | | ✔ | — |
 | content | ✔ | | ✔ | ✔ | | ✔ | ✔ (top Q&A) |
 | social | ✔ | ✔ | ✔ | ✔ (ATTENDED check) | | | |
-| notification | ✔ | ✔ | | | | | |
+| notification | ✔ | ✔ | ✔ (đọc)¹ | ✔ (đọc)¹ | | | |
 | admin (P6) | gọi mọi module qua service công khai | | | | | | |
+
+¹ Amend 2026-07-04 (lúc code P6): listener của notification NGHE domain event chỉ mang id →
+phải ĐỌC dữ liệu nguồn qua service công khai (event/booking/social) để soạn nội dung.
+Chiều ngược vẫn cấm tuyệt đối: không module nào gọi notification để "gửi".
 
 - **RULE:** không phụ thuộc vòng. `notification` KHÔNG được module khác gọi trực tiếp để "gửi" — nó **nghe domain event**.
 - **Domain events nội bộ** (Spring `ApplicationEventPublisher`): side-effect (email, notification in-app, enqueue AI) chạy ở `@TransactionalEventListener(phase = AFTER_COMMIT)`. **RULE:** transaction chứa tiền/booking KHÔNG chứa side-effect ngoài DB.

@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Nghiệp vụ đặt vé (plan §3; money-core §3.1–3.2). Event FREE → CONFIRMED ngay; event có phí
@@ -159,6 +160,16 @@ public class BookingService {
 
         booking.setStatus(BookingStatus.CANCELLED);
         return bookingMapper.toResponse(bookingRepository.save(booking));
+    }
+
+    /**
+     * Attendee cần báo khi event bị hủy: vé paid đã thành REFUNDED (escrow hoàn xong),
+     * vé free vẫn CONFIRMED. Đọc cho NotificationListener (master §2 amend 2026-07-04).
+     */
+    @Transactional(readOnly = true)
+    public List<Booking> listForEventCancelNotice(Long eventId) {
+        return bookingRepository.findByEventIdAndStatusIn(eventId,
+                List.of(BookingStatus.CONFIRMED, BookingStatus.REFUNDED));
     }
 
     // ----- helpers -----

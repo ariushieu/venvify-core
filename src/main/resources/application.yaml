@@ -62,6 +62,9 @@ app:
   booking:
     transfer-max-hops: 1              # O2 (P3): mỗi vé pass tối đa 1 lần — chống rửa vé lòng vòng
     transfer-expiry-hours: 72         # TTL offer chuyển nhượng; quá hạn job đánh EXPIRED
+  social:
+    review-window-days: 14            # P6 §2: chỉ review trong N ngày kể từ khi event ENDED
+    notify-email-max-followers: 500   # P6 §1: host > N follower → event mới chỉ báo in-app, bỏ email
   auth:
     # T6: chống brute-force login — khóa account sau N lần sai trong cửa sổ lockout.
     # Response vẫn 401 generic, không lộ trạng thái khóa.

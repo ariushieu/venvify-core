@@ -11,4 +11,11 @@ public interface EmailService {
      * nếu gửi thất bại.
      */
     void sendOpsAlert(String subject, String body);
+
+    /**
+     * Email đi kèm notification in-app (transfer, event hủy, event mới từ host follow — P6).
+     * Impl chạy {@code @Async} (executor riêng, master §8), fail chỉ log — KHÔNG ném ngược,
+     * KHÔNG gọi trong DB transaction (listener AFTER_COMMIT mới được gọi).
+     */
+    void sendNotificationEmail(String toEmail, String subject, String bodyText);
 }
