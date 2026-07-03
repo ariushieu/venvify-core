@@ -4,7 +4,6 @@ import com.venvify.venvifycore.booking.entity.Booking;
 import com.venvify.venvifycore.booking.enums.BookingStatus;
 import com.venvify.venvifycore.booking.repository.BookingRepository;
 import com.venvify.venvifycore.common.exception.ConflictException;
-import com.venvify.venvifycore.common.util.UuidV7;
 import com.venvify.venvifycore.event.entity.Event;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.wallet.entity.EscrowHold;
@@ -178,8 +177,7 @@ public class EscrowService {
                 .orElseThrow(() -> new IllegalStateException("System wallet missing: " + type));
     }
 
-    /** transaction_ref nội bộ: PREFIX-UUIDv7 (plan §2). Format nhúng nội dung CK là việc của slice Sepay. */
     private static String ref(String prefix) {
-        return prefix + "-" + UuidV7.generateString();
+        return TransactionRefs.next(prefix);
     }
 }
