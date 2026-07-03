@@ -47,6 +47,7 @@ services:
       --collation-server=utf8mb4_unicode_ci
       --innodb-buffer-pool-size=128M
       --max-connections=50
+      --log-bin-trust-function-creators=1
     environment:
       TZ: ${TZ:-UTC}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}

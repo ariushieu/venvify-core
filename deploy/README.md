@@ -55,6 +55,7 @@ ssh root@<vps-ip> 'chmod +x ~/vps-setup-kit/projects/venvify-core/backup.sh'
 ssh root@<vps-ip> '(crontab -l 2>/dev/null; echo "5 3 * * * bash ~/vps-setup-kit/projects/venvify-core/backup.sh >> /var/log/venvify-backup.log 2>&1") | crontab -'
 ```
 
+- MySQL cần `log_bin_trust_function_creators=1` (đã có trong `docker-compose.yml`) — V5 tạo trigger bằng user thường, thiếu flag này sẽ lỗi 1419 khi migrate. Dev local: `SET PERSIST log_bin_trust_function_creators = ON;` bằng root, một lần.
 - Dump vào `/opt/backups/venvify-core/venvify-<UTC-timestamp>.sql.gz`, giữ 14 ngày.
 - Script tự fail (exit ≠ 0) nếu dump rỗng/gzip cụt — kiểm tra `/var/log/venvify-backup.log` khi nghi ngờ.
 - `--triggers` là bắt buộc: V5 có trigger chặn UPDATE/DELETE trên `ledger_entries`.
