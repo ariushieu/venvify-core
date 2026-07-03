@@ -22,11 +22,16 @@ import com.venvify.venvifycore.wallet.service.EscrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Nghiệp vụ vòng đời Event (plan §2). Ownership-based: chỉ host sở hữu mới sửa/đổi trạng thái.
@@ -123,8 +128,20 @@ public class EventService {
      */
     @Transactional
     public EventResponse cancel(String userPublicId, String eventPublicId) {
-        Event event = requireOwnedEvent(userPublicId, eventPublicId);
+        return doCancel(requireOwnedEvent(userPublicId, eventPublicId));
+    }
 
+    /**
+     * Takedown của admin (P6 §4): force-cancel KHÔNG cần ownership — tái dùng nguyên luồng
+     * refund money-core §3.3. AdminModerationService bọc tx + audit; notification attendee
+     * đi cùng EventCancelledEvent như host tự hủy.
+     */
+    @Transactional
+    public EventResponse cancelAsAdmin(String eventPublicId) {
+        return doCancel(requireExistingEvent(eventPublicId));
+    }
+
+    private EventResponse doCancel(Event event) {
         if (event.getStatus() != EventStatus.DRAFT && event.getStatus() != EventStatus.PUBLISHED) {
             throw new BadRequestException("Only draft or published events can be cancelled");
         }
@@ -174,6 +191,34 @@ public class EventService {
         return eventMapper.toResponse(event);
     }
 
+    // ---- admin (P6 §4) ----
+
+    @Transactional(readOnly = true)
+    public PagedResponse<EventResponse> adminSearch(String q, EventStatus status, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new BadRequestException("Invalid page or size");
+        }
+        String normalized = (q == null || q.isBlank()) ? null : q.trim();
+        Page<Event> result = eventRepository.adminSearch(normalized, status, PageRequest.of(page, size));
+        return PagedResponse.of(result.map(eventMapper::toResponse));
+    }
+
+    /** KPI dashboard — đếm theo status. */
+    @Transactional(readOnly = true)
+    public Map<EventStatus, Long> countByStatus() {
+        Map<EventStatus, Long> counts = new EnumMap<>(EventStatus.class);
+        eventRepository.countByStatusGrouped().forEach(row -> counts.put(row.getStatus(), row.getTotal()));
+        return counts;
+    }
+
+    /** KPI dashboard — event PUBLISHED bắt đầu trong {@code days} ngày tới. */
+    @Transactional(readOnly = true)
+    public long countUpcomingWithinDays(int days) {
+        Instant now = Instant.now();
+        return eventRepository.countByStatusAndDeletedFalseAndStartTimeBetween(
+                EventStatus.PUBLISHED, now, now.plus(Duration.ofDays(days)));
+    }
+
     /** Lookup entity cho module khác (social review…) — 404 nếu không có/đã xóa. */
     @Transactional(readOnly = true)
     public Event loadByPublicId(String eventPublicId) {
@@ -183,7 +228,7 @@ public class EventService {
     /** Đọc cho NotificationListener (master §2 amend 2026-07-04) — fetch join host, không lazy leak. */
     @Transactional(readOnly = true)
     public Event loadWithHost(Long eventId) {
-        return eventRepository.findWithHostByIdIn(java.util.List.of(eventId)).stream()
+        return eventRepository.findWithHostByIdIn(List.of(eventId)).stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Event not found: " + eventId));
     }

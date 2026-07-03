@@ -60,6 +60,35 @@ public interface EventRepository extends JpaRepository<Event, Long>, EventSearch
         long getTotal();
     }
 
+    // ---- admin (P6 §4) ----
+
+    /** Search CSKH theo title/slug + filter status; null = bỏ filter. Soft-deleted vẫn hiện (admin). */
+    @Query(value = """
+            select e from Event e join fetch e.host
+            where (:status is null or e.status = :status)
+              and (:q is null or lower(e.title) like lower(concat('%', :q, '%'))
+                   or lower(e.slug) like lower(concat('%', :q, '%')))
+            order by e.id desc""",
+            countQuery = """
+            select count(e) from Event e
+            where (:status is null or e.status = :status)
+              and (:q is null or lower(e.title) like lower(concat('%', :q, '%'))
+                   or lower(e.slug) like lower(concat('%', :q, '%')))""")
+    Page<Event> adminSearch(@Param("q") String q, @Param("status") EventStatus status, Pageable pageable);
+
+    /** KPI dashboard: đếm theo status một câu GROUP BY. */
+    @Query("select e.status as status, count(e) as total from Event e where e.deleted = false group by e.status")
+    List<StatusCount> countByStatusGrouped();
+
+    interface StatusCount {
+        EventStatus getStatus();
+
+        long getTotal();
+    }
+
+    /** KPI: event sắp diễn ra trong N ngày tới. */
+    long countByStatusAndDeletedFalseAndStartTimeBetween(EventStatus status, Instant from, Instant to);
+
     /** Khóa row event để cập nhật claimed_slots an toàn khi nhiều người claim đồng thời (D4). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from Event e where e.id = :id")

@@ -343,6 +343,22 @@ class EventServiceTest {
     }
 
     @Test
+    void cancelAsAdmin_takedownWithoutOwnership_reusesRefundFlow() {
+        // P6 §4: admin không phải chủ event vẫn takedown được — cùng luồng refund duy nhất.
+        Event published = event(EventStatus.PUBLISHED);
+        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(published));
+        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(published));
+        when(eventRepository.save(published)).thenReturn(published);
+        when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
+
+        eventService.cancelAsAdmin("evt-pid");
+
+        assertThat(published.getStatus()).isEqualTo(EventStatus.CANCELLED);
+        verify(escrowService).refundHeldForEvent(published);
+        verify(eventPublisher).publishEvent(any(EventCancelledEvent.class));
+    }
+
+    @Test
     void delete_draftEvent_setsDeletedFlag() {
         Event draft = event(EventStatus.DRAFT);
         when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(draft));

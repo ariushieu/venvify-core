@@ -5,6 +5,7 @@ import com.venvify.venvifycore.common.dto.PagedResponse;
 import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ConflictException;
 import com.venvify.venvifycore.common.exception.ForbiddenException;
+import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
 import com.venvify.venvifycore.event.entity.Event;
 import com.venvify.venvifycore.event.enums.EventStatus;
 import com.venvify.venvifycore.event.service.EventService;
@@ -98,6 +99,18 @@ public class ReviewService {
         return PagedResponse.of(reviewRepository
                 .findByHostIdAndHiddenFalseOrderByIdDesc(host.getId(), pageable)
                 .map(r -> toResponse(r, true)));
+    }
+
+    /**
+     * Moderation (P6 §2/§4) — CHỈ AdminModerationService gọi (bọc quyền ADMIN + audit cùng tx).
+     * Idempotent: set trạng thái đích, không toggle.
+     */
+    @Transactional
+    public Review setHidden(String reviewPublicId, boolean hidden) {
+        Review review = reviewRepository.findByPublicId(reviewPublicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
+        review.setHidden(hidden);
+        return reviewRepository.save(review);
     }
 
     // ----- helpers -----

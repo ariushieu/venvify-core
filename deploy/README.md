@@ -40,6 +40,20 @@ curl -s https://api.your-domain.com/api/v1/health   # {"status":"UP"}
 
 Mỗi lần push `master` → CD tự: test (MySQL service) → build image → push Docker Hub → SSH vào VPS `docker compose pull app && up -d app` → health check → prune image cũ. DB không bị restart khi deploy (`--no-deps`).
 
+## Seed admin (P6 — một lần, SQL tay, KHÔNG hardcode trong migration)
+
+```bash
+# Chọn user đã đăng ký + verify sẵn làm admin (thay email):
+docker compose exec -T mysql sh -c \
+  'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" venvify_db' <<'SQL'
+INSERT INTO user_roles (user_id, role)
+SELECT id, 'ADMIN' FROM users WHERE email = 'you@example.com'
+  AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = users.id AND ur.role = 'ADMIN');
+SQL
+# User phải logout/login lại (JWT cũ chưa mang role mới). Audit: mọi mutation admin
+# tự ghi audit_logs (append-only) — không cần thao tác thêm.
+```
+
 ---
 
 # Runbook backup / restore / rollback (T7)

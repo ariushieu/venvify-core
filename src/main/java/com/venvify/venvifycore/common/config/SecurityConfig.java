@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -29,9 +30,12 @@ import java.util.List;
 /**
  * Spring Security stateless + JWT (CLAUDE.md §4). Mở public cho /auth/** và swagger;
  * còn lại yêu cầu access token hợp lệ. Lỗi 401/403 trả JSON qua entry point / denied handler.
+ * {@code @EnableMethodSecurity}: lớp AuthZ thứ 2 — @PreAuthorize trên AdminController
+ * (master §5: route matcher + method security, thiếu 1 trong 2 vẫn chặn được).
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -67,6 +71,8 @@ public class SecurityConfig {
                         // Storefront host public (P3 §2.4 + P6 review): profile + tab events + reviews.
                         // Follow (PUT/DELETE) và các path khác dưới /hosts vẫn rơi xuống authenticated.
                         .requestMatchers(HttpMethod.GET, "/hosts/*", "/hosts/*/events", "/hosts/*/reviews").permitAll()
+                        // Admin panel (P6 §4) — lớp 1; lớp 2 là @PreAuthorize trên controller.
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
