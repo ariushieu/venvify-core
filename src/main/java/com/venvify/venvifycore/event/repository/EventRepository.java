@@ -15,9 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
-public interface EventRepository extends JpaRepository<Event, Long> {
+public interface EventRepository extends JpaRepository<Event, Long>, EventSearchRepository {
 
     Optional<Event> findByPublicId(String publicId);
 
@@ -25,11 +26,29 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     boolean existsBySlug(String slug);
 
-    Page<Event> findByStatusAndDeletedFalse(EventStatus status, Pageable pageable);
-
-    Page<Event> findByStatusAndCategoryAndDeletedFalse(EventStatus status, EventCategory category, Pageable pageable);
-
     Page<Event> findByHostIdAndDeletedFalse(Long hostId, Pageable pageable);
+
+    /**
+     * Bước 2 của 2-query pattern discovery: load entity theo trang IDs từ
+     * {@link EventSearchRepository#searchIds} — fetch join host, caller tự xếp lại theo thứ tự ids.
+     */
+    @Query("select e from Event e join fetch e.host where e.id in :ids")
+    List<Event> findWithHostByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Count theo category cho trang chủ (plan P3 §2.3) — GROUP BY một câu, cache 60s ở service. */
+    @Query("""
+            select e.category as category, count(e) as total
+            from Event e
+            where e.status = :status and e.deleted = false and e.startTime > :now and e.category is not null
+            group by e.category""")
+    List<CategoryCount> countUpcomingByCategory(@Param("status") EventStatus status, @Param("now") Instant now);
+
+    /** Projection cho {@link #countUpcomingByCategory}. */
+    interface CategoryCount {
+        EventCategory getCategory();
+
+        long getTotal();
+    }
 
     /** Khóa row event để cập nhật claimed_slots an toàn khi nhiều người claim đồng thời (D4). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

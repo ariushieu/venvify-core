@@ -391,34 +391,7 @@ class EventServiceTest {
         assertThat(eventService.getDetail(null, "evt-pid")).isSameAs(RESPONSE);
     }
 
-    @Test
-    void listPublished_withoutCategory_usesStatusQuery() {
-        Event published = event(EventStatus.PUBLISHED);
-        Pageable pageable = PageRequest.of(0, 20);
-        when(eventRepository.findByStatusAndDeletedFalse(eq(EventStatus.PUBLISHED), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(published)));
-        when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
-
-        PagedResponse<EventResponse> result = eventService.listPublished(null, pageable);
-
-        assertThat(result.items()).containsExactly(RESPONSE);
-        verify(eventRepository, never())
-                .findByStatusAndCategoryAndDeletedFalse(any(), any(), any());
-    }
-
-    @Test
-    void listPublished_withCategory_usesCategoryQuery() {
-        Event published = event(EventStatus.PUBLISHED);
-        Pageable pageable = PageRequest.of(0, 20);
-        when(eventRepository.findByStatusAndCategoryAndDeletedFalse(
-                eq(EventStatus.PUBLISHED), eq(EventCategory.TECHNOLOGY), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(published)));
-        when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
-
-        PagedResponse<EventResponse> result = eventService.listPublished(EventCategory.TECHNOLOGY, pageable);
-
-        assertThat(result.items()).containsExactly(RESPONSE);
-    }
+    // listPublished đã sang EventDiscoveryService (P3) — test ở EventDiscoveryServiceTest.
 
     @Test
     void listMine_returnsHostEvents() {
