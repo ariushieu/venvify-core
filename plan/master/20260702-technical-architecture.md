@@ -142,11 +142,13 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 
 | Enum | Giá trị hiện tại | Kế hoạch thêm |
 |---|---|---|
-| TransactionType | COMMISSION, PAYOUT, REFUND, TICKET_PURCHASE, TOPUP | +REVERSAL (V4) · +SUSPENSE_HOLD, SUSPENSE_RESOLVE (V5 — đề xuất) · +TICKET_RESALE (V6) |
-| PaymentProvider | INTERNAL, MOMO, VNPAY | +SEPAY (V5) |
+| TransactionType | COMMISSION, PAYOUT, REFUND, REVERSAL, TICKET_PURCHASE, TICKET_RESALE, TOPUP | +SUSPENSE_HOLD, SUSPENSE_RESOLVE (P2 — đề xuất) |
+| PaymentProvider | INTERNAL, MOMO, VNPAY | +SEPAY (P2) |
 | BookingStatus | ATTENDED, CANCELLED, CONFIRMED, NO_SHOW, REFUNDED, RESERVED | (chưa có kế hoạch) |
 | EscrowStatus | HELD, PAID_OUT, REFUNDED, RELEASED | (chưa) |
 | EventStatus | CANCELLED, DRAFT, ENDED, LIVE, POSTPONED, PUBLISHED | (chưa) |
+| TicketTransferStatus | CANCELLED, COMPLETED, DECLINED, EXPIRED, PENDING | (bảng mới V6/P3) |
+| NotificationType | BOOKING_CONFIRMED, EVENT_CANCELLED, EVENT_POSTPONED, EVENT_REMINDER, EVENT_UPDATED, NEW_EVENT_FROM_FOLLOWED_HOST, PAYMENT_RECEIPT + nhóm TRANSFER_OFFER_RECEIVED/COMPLETED/DECLINED/CANCELLED/EXPIRED (P3+P6 2026-07-04; ⚠ giá trị mới phải ≤30 ký tự — cột varchar(30)) | +PAYOUT_PAID (P2) · +RECORDING_READY (P4) · +SUMMARY_READY (P5) |
 
 - **⚠ Time policy (T1 §15):** hiện `hibernate.jdbc.time_zone` + `jackson.time-zone` = `Asia/Ho_Chi_Minh` trong khi MySQL container chạy `+00:00` và ERD tuyên bố UTC. Chuẩn hóa **UTC toàn tuyến** (đổi 2 dòng config) ở đầu P1 code, khi DB chưa có data thật — để sau này là một cuộc migrate data đau đớn.
 - **Flyway RULE:** file đã applied là bất biến · naming `V{n}__{snake_case}.sql` · mỗi slice một file · prod migrate luôn có backup trước (§10).
@@ -159,11 +161,13 @@ Ma trận phụ thuộc cho phép (hàng gọi cột, qua **service** — KHÔNG
 | V3 | auth tokens (refresh, email verification) | ✅ |
 | V4 | email OTP (đổi verify link → mã 6 số; ngoài kế hoạch ledger cũ) | ✅ |
 | V5 | money-core: triggers append-only, CHECKs, **convert mọi cột enum → VARCHAR(30)**, completed_at/refunded_at/paid_out_at (+REVERSAL là hằng Java, sau convert không cần DDL) | ✅ code 2026-07-03 |
-| V6 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until (giá trị enum mới: không cần DDL) | 📐 |
-| V7 (P3) | ticket_transfers, bookings.transfer_count, FULLTEXT index events | 📐 |
-| V8 (P4) | room_attendances, events.recording_enabled, recordings.audio_url, chat moderation cols | 📐 |
-| V9 (P5) | ai_jobs | 📐 |
-| V10 (P6) | audit_logs, reviews.hidden | 📐 |
+| V6 (P3) | ticket_transfers, bookings.transfer_count, FULLTEXT index events | ✅ code 2026-07-04 |
+| V7 (P6) | audit_logs, reviews.hidden | 🔨 |
+| V8 (P2) | payment_intents, sepay_webhook_events, host_bank_accounts, payout_requests, event_reminders, auth_login_codes, bookings.reserved_until (giá trị enum mới: không cần DDL) | 📐 |
+| V9 (P4) | room_attendances, events.recording_enabled, recordings.audio_url, chat moderation cols | 📐 |
+| V10 (P5) | ai_jobs | 📐 |
+
+> Đánh lại 2026-07-04: user chốt **để third-party sau cùng** → P3 + P6 (phần không phụ thuộc ngoài) code trước P2 Sepay, V-number đổi theo thứ tự code thật. Phần P6 phụ thuộc P2/P4/P5 (payout/suspense admin, AI-jobs retry, STOMP kick khi ban, attendance rate) ở lại chờ phase gốc — xem amend log 2 plan detail.
 
 - Index policy: FK tự có index (InnoDB); composite cho query nóng khai ở entity ✅; detail plan của query list mới phải nêu index nó dùng; EXPLAIN các query discover trước khi ship P3.
 
@@ -277,3 +281,4 @@ Scale-path đã ghi sẵn (chỉ mở khi cần): >1 app instance → ShedLock +
 
 - 2026-07-02 — tạo doc; thay thế SPEC §5.3–5.4 ở tầng kỹ thuật (SPEC giữ vai trò yêu cầu sản phẩm); FE tách khỏi phạm vi kỹ thuật backend.
 - 2026-07-02 (review chéo đợt 1) — **enum → VARCHAR từ V4** (bỏ policy native ENUM, user chốt); reconcile lệch = P0 email admin ngay (§9); T6 brute-force login kéo về P1, T7 runbook restore sớm (§15); đặc tả luồng RESERVED+intent (plan P2 §2.9, Đ-P2.6 reuse row); chính sách refund-sau-resale ghi tường minh (20260630 §3.4); supersede markers vào plan 20260630. RULE mới: plan mới ghi đè plan cũ → PHẢI thêm banner ⛔ vào đúng chỗ bị ghi đè trong plan cũ, cùng commit.
+- 2026-07-04 — **đảo thứ tự phase: P3 + P6 (phần không third-party) code trước P2** (user chốt "để bên thứ 3 sau cùng"); migration ledger đánh lại V6=P3, V7=P6, V8=P2, V9=P4, V10=P5; enum ledger cập nhật TICKET_RESALE + nhóm TRANSFER_* + TicketTransferStatus; O1–O3 chốt theo đề xuất P3 §0 (resale commission 0%, MAX_HOPS 1, cutoff = start_time); amend log chi tiết trong 2 plan P3/P6.

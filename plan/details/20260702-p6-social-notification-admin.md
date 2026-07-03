@@ -1,8 +1,14 @@
 # Plan kỹ thuật P6 — Follow, Review, Notification, Admin, Analytics
 
-**Ngày tạo:** 2026-07-02 · **Trạng thái:** ⏳ CHỜ DUYỆT (khung — refresh §9 đầu phase) · **Phase:** P6 (T1–T2/2027)
-**Tiền đề:** P4 attendance chạy (điều kiện review) · P2 payout endpoints có sẵn (admin gom vào) · bảng follows/reviews/notifications đã có từ V1.
+**Ngày tạo:** 2026-07-02 · **Trạng thái:** ✅ ĐÃ DUYỆT 2026-07-04 phần không phụ thuộc (refresh §9 — xem amend log) · **Phase:** P6 kéo lên code 2026-07-04 cùng P3 (trước P2/P4/P5)
+**Tiền đề:** ~~P4 attendance chạy (điều kiện review) · P2 payout endpoints có sẵn (admin gom vào)~~ ⛔ đảo thứ tự — xem amend log · bảng follows/reviews/notifications đã có từ V1.
 **Bám:** master doc — đặc biệt §2 (notification chỉ NGHE domain event) và §5 (audit).
+
+> **⛔ AMEND LOG (2026-07-04 — P6 kéo lên trước P2/P4/P5 theo quyết định "third-party sau cùng"; user duyệt):**
+> - **Làm ngay:** follow (§1) · review (§2 — "ship dark", xem dưới) · notification in-app (§3) · admin users/events/transactions/KPI (§4 một phần) · host analytics (§5 trừ attendance rate). Migration số thật = **V7** (master §6 đánh lại).
+> - **Review §2 "ship dark":** giữ nguyên gate `booking ATTENDED` (chống review ảo) dù data ATTENDED chỉ có từ P4 → endpoint sống nhưng chưa ai đủ điều kiện review cho tới P4. Có chủ đích, KHÔNG nới gate xuống CONFIRMED.
+> - **Dời lại chờ phase gốc:** admin payout list/filter + suspense resolve (P2) · AI-jobs retry (P5) · đá STOMP session khi ban (P4 — hiện ban chỉ revoke refresh token; access token cũ sống tối đa 15', chấp nhận, khớp master §5) · attendance rate trong event-stats (P4) · KPI dashboard bỏ 2 ô payout pending + suspense balance tới P2.
+> - **NotificationType nhóm TRANSFER_*** (P3 cần): TRANSFER_OFFER_RECEIVED, TRANSFER_COMPLETED, TRANSFER_DECLINED, TRANSFER_CANCELLED, TRANSFER_EXPIRED — ghi vào enum ledger master §6, ≤30 ký tự (cột varchar(30)).
 
 ---
 

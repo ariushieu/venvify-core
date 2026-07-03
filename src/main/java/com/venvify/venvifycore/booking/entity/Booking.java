@@ -66,4 +66,9 @@ public class Booking extends BaseEntity {
 
     @Column(name = "booked_at", nullable = false)
     private Instant bookedAt;
+
+    /** Số lần vé đã được pass (R2 — giới hạn app.booking.transfer-max-hops, chống rửa vé lòng vòng). */
+    @Column(name = "transfer_count", nullable = false)
+    @Builder.Default
+    private Integer transferCount = 0;
 }

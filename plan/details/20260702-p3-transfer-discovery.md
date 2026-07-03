@@ -1,8 +1,16 @@
 # Plan kỹ thuật P3 — Chuyển nhượng vé + Discovery/Search
 
-**Ngày tạo:** 2026-07-02 · **Trạng thái:** ⏳ CHỜ DUYỆT (khung — refresh §8 đầu phase) · **Phase:** P3 (dự kiến T9/2026)
-**Tiền đề:** P2 xong (payment_intents + webhook Sepay chạy — transfer resale tái dùng hạ tầng đó).
+**Ngày tạo:** 2026-07-02 · **Trạng thái:** ✅ ĐÃ DUYỆT 2026-07-04 (refresh §8 xong — xem amend log) · **Phase:** P3 (code 2026-07-04, TRƯỚC P2)
+**Tiền đề:** ~~P2 xong (payment_intents + webhook Sepay chạy — transfer resale tái dùng hạ tầng đó)~~ ⛔ đảo thứ tự — xem amend log.
 **Nền:** thiết kế transfer đã có ở `details/20260630-ticket-transfer-and-payment.md` (D8–D13, R1–R6, DDL `ticket_transfers` §5) — doc này KHÔNG lặp lại, chỉ chốt opens + bổ sung tầng kỹ thuật còn thiếu. Bám `master/20260702-technical-architecture.md`.
+
+> **⛔ AMEND LOG (2026-07-04 — refresh đầu phase, user duyệt):**
+> - **Thứ tự phase đảo:** user chốt "third-party để sau cùng" → P3 code TRƯỚC P2 Sepay. Hệ quả duy nhất: **§1.3 đường QR (purpose TRANSFER) DỜI về P2** — resale hiện chỉ đi **đường ví**; mọi phần khác của doc không phụ thuộc Sepay. (Prod chưa có đường nạp ví cho tới P2 nên resale có giá chưa dùng được ngoài prod — nhất quán với paid booking hiện tại, không phải regression.)
+> - **§0 chốt opens:** O1 = 0% (`app.money.resale-commission-percent: 0`, code đi `postSplit` sẵn — bật phí sau chỉ đổi config) · O2 = 1 hop · O3 = chặn khi `now ≥ start_time`. Code vẫn tính commission theo config (leg 0 tự skip trong LedgerService).
+> - **§3 migration:** số thật = **V6** (không phải V7 — P2 nhường số; master §6 đã đánh lại). Index `(booking_id, status)` thay cho `INDEX(booking_id)` đơn của DDL 20260630 §5 (prefix phủ được).
+> - **§2.4 storefront basic:** LÀM trong đợt này (P6 gộp cùng — followerCount/avgRating có luôn, không để nullable chờ).
+> - **Edge có chủ đích (phát hiện lúc refresh):** receiver còn booking-row **CANCELLED** của cùng event → accept bị 409 (UNIQUE(event_id, attendee_id) không cho đổi attendee trúng row trùng; không hard-delete row cũ vì dính FK tiền). Limitation MVP — ghi báo cáo, xử nếu gặp thật.
+> - Notification/email 2 chiều (§1.2 AFTER_COMMIT): implement cùng đợt — module notification P6 làm ngay sau transfer, cùng chuỗi commit.
 
 ---
 
