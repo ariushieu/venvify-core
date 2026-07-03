@@ -9,6 +9,7 @@ import com.venvify.venvifycore.event.entity.Event;
 import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventListSort;
 import com.venvify.venvifycore.event.enums.EventStatus;
+import com.venvify.venvifycore.event.enums.HostEventScope;
 import com.venvify.venvifycore.event.mapper.EventMapper;
 import com.venvify.venvifycore.event.repository.EventRepository;
 import com.venvify.venvifycore.event.repository.EventSearchRepository.IdPage;
@@ -18,6 +19,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -139,6 +142,44 @@ class EventDiscoveryServiceTest {
         service.search(q);
 
         verify(eventRepository).searchIds(eq(q), eq(explicit));
+    }
+
+    // ---- storefront hostEvents ----
+
+    @Test
+    void hostEvents_upcoming_queriesPublishedFromNowAscending() {
+        Event e1 = event(1);
+        when(eventRepository.findByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+                eq(7L), eq(EventStatus.PUBLISHED), any(Instant.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(e1)));
+        when(eventMapper.toCard(e1)).thenReturn(card(1));
+
+        PagedResponse<EventCardResponse> result = service.hostEvents(7L, HostEventScope.UPCOMING, 0, 20);
+
+        assertThat(result.items()).hasSize(1);
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+                eq(7L), eq(EventStatus.PUBLISHED), any(Instant.class), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getSort().getOrderFor("startTime").isAscending()).isTrue();
+    }
+
+    @Test
+    void hostEvents_past_queriesEndedDescending() {
+        when(eventRepository.findByHostIdAndStatusAndDeletedFalse(eq(7L), eq(EventStatus.ENDED), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.hostEvents(7L, HostEventScope.PAST, 0, 20);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(eventRepository).findByHostIdAndStatusAndDeletedFalse(
+                eq(7L), eq(EventStatus.ENDED), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getSort().getOrderFor("startTime").isDescending()).isTrue();
+    }
+
+    @Test
+    void hostEvents_invalidSize_rejected() {
+        assertThatThrownBy(() -> service.hostEvents(7L, HostEventScope.UPCOMING, 0, 101))
+                .isInstanceOf(BadRequestException.class);
     }
 
     // ---- categories ----

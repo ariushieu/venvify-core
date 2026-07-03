@@ -8,11 +8,15 @@ import com.venvify.venvifycore.event.dto.EventSearchQuery;
 import com.venvify.venvifycore.event.entity.Event;
 import com.venvify.venvifycore.event.enums.EventCategory;
 import com.venvify.venvifycore.event.enums.EventStatus;
+import com.venvify.venvifycore.event.enums.HostEventScope;
 import com.venvify.venvifycore.event.mapper.EventMapper;
 import com.venvify.venvifycore.event.repository.EventRepository;
 import com.venvify.venvifycore.event.repository.EventSearchRepository.IdPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,6 +75,33 @@ public class EventDiscoveryService {
             result.add(new CategoryCountResponse(category, counts.getOrDefault(category, 0L)));
         }
         return result;
+    }
+
+    // ---- storefront (plan P3 §2.4 — social module gọi qua service, không import repo chéo) ----
+
+    /** Event công khai của host: UPCOMING = PUBLISHED chưa tới giờ (gần nhất trước); PAST = ENDED (mới nhất trước). */
+    @Transactional(readOnly = true)
+    public PagedResponse<EventCardResponse> hostEvents(Long hostId, HostEventScope scope, int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new BadRequestException("Invalid page or size");
+        }
+        Page<Event> events;
+        if (scope == HostEventScope.PAST) {
+            PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startTime"));
+            events = eventRepository.findByHostIdAndStatusAndDeletedFalse(hostId, EventStatus.ENDED, pageable);
+        } else {
+            PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "startTime"));
+            events = eventRepository.findByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+                    hostId, EventStatus.PUBLISHED, Instant.now(), pageable);
+        }
+        return PagedResponse.of(events.map(eventMapper::toCard));
+    }
+
+    /** Số event sắp diễn ra của host — ô thống kê trên storefront. */
+    @Transactional(readOnly = true)
+    public long countUpcomingByHost(Long hostId) {
+        return eventRepository.countByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+                hostId, EventStatus.PUBLISHED, Instant.now());
     }
 
     // ----- helpers -----

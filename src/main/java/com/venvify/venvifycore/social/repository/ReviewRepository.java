@@ -17,7 +17,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     Page<Review> findByHostId(Long hostId, Pageable pageable);
 
-    /** Rating trung bình của host cho storefront. */
+    /** Rating trung bình của host cho storefront. (P6 review sẽ thêm filter hidden vào đây.) */
     @Query("select coalesce(avg(r.rating), 0) from Review r where r.host.id = :hostId")
     double averageRatingByHostId(@Param("hostId") Long hostId);
+
+    long countByHostId(Long hostId);
 }

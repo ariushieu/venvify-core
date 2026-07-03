@@ -28,6 +28,16 @@ public interface EventRepository extends JpaRepository<Event, Long>, EventSearch
 
     Page<Event> findByHostIdAndDeletedFalse(Long hostId, Pageable pageable);
 
+    // ---- storefront (plan P3 §2.4): upcoming = PUBLISHED chưa tới giờ; past = ENDED ----
+
+    Page<Event> findByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+            Long hostId, EventStatus status, Instant now, Pageable pageable);
+
+    Page<Event> findByHostIdAndStatusAndDeletedFalse(Long hostId, EventStatus status, Pageable pageable);
+
+    long countByHostIdAndStatusAndDeletedFalseAndStartTimeGreaterThanEqual(
+            Long hostId, EventStatus status, Instant now);
+
     /**
      * Bước 2 của 2-query pattern discovery: load entity theo trang IDs từ
      * {@link EventSearchRepository#searchIds} — fetch join host, caller tự xếp lại theo thứ tự ids.

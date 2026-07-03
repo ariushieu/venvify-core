@@ -14,4 +14,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     boolean existsByHostHandle(String hostHandle);
+
+    /** Storefront public theo vanity handle (plan P3 §2.4). */
+    Optional<User> findByHostHandleAndDeletedFalse(String hostHandle);
 }
