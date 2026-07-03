@@ -183,7 +183,7 @@ ALTER TABLE escrow_holds
 Ghi chú:
 - Trigger 1-statement (không `BEGIN…END`) → Flyway chạy thẳng, không cần đổi delimiter.
 - Entity phải thêm field khớp (`completedAt`, `refundedAt`, `paidOutAt`, enum `REVERSAL`) cùng commit — `ddl-auto: validate` + CI (contextLoads chạy Flyway thật) sẽ bắt nếu lệch.
-- **Đi kèm convert VARCHAR:** set `hibernate.type.preferred_enum_jdbc_type: VARCHAR` (application.yaml, cả profile schema-gen) để Hibernate map @Enumerated(STRING) → VARCHAR thống nhất; verify tên property đúng với Hibernate bundled trong Boot 4.1 + chạy `ddl-auto: validate` pass trên dev TRƯỚC khi chốt file V4.
+- ~~Set `hibernate.type.preferred_enum_jdbc_type: VARCHAR`~~ **Đã verify lúc code (2026-07-03): property này KHÔNG tồn tại trong Hibernate 7.4.1** (chỉ có preferred_boolean/uuid/instant/duration/array; `prefer_native_enum_types` là cho Postgres/Oracle). Không cần config: validator MySQLDialect coi ENUM↔VARCHAR tương đương — bằng chứng `events.timezone` (@Enumerated(STRING) ↔ varchar(40) từ V2) pass `ddl-auto: validate` từ trước tới nay. DDL bảng mới viết tay trong Flyway → cứ dùng VARCHAR.
 - `REVERSAL` slice này chỉ *sẵn sàng* (enum + type), chưa có endpoint admin tạo bút toán đảo — công cụ xử lý sự cố, dùng tay qua service khi cần.
 
 ---
