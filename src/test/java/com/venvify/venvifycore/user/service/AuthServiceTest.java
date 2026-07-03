@@ -69,6 +69,8 @@ class AuthServiceTest {
     private EmailService emailService;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private LoginAttemptService loginAttemptService;
 
     @InjectMocks
     private AuthService authService;
@@ -162,21 +164,37 @@ class AuthServiceTest {
     // ---- login ----
 
     @Test
-    void login_unknownEmail_throwsUnauthorized() {
+    void login_unknownEmail_throwsUnauthorizedAndRecordsFailure() {
         when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, RAW_PASSWORD)))
                 .isInstanceOf(UnauthorizedException.class);
+        // Đếm cả email không tồn tại — attacker không phân biệt được (T6).
+        verify(loginAttemptService).recordFailure(EMAIL);
     }
 
     @Test
-    void login_wrongPassword_throwsUnauthorized() {
+    void login_wrongPassword_throwsUnauthorizedAndRecordsFailure() {
         when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(activeUser()));
         when(passwordEncoder.matches(RAW_PASSWORD, PASSWORD_HASH)).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, RAW_PASSWORD)))
                 .isInstanceOf(UnauthorizedException.class);
         verify(refreshTokenRepository, never()).save(any());
+        verify(loginAttemptService).recordFailure(EMAIL);
+    }
+
+    @Test
+    void login_lockedAccount_throwsGeneric401WithoutTouchingRepo() {
+        when(loginAttemptService.isLocked(EMAIL)).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, RAW_PASSWORD)))
+                .isInstanceOf(UnauthorizedException.class)
+                // Cùng message với sai mật khẩu — không lộ trạng thái khóa (T6).
+                .hasMessageContaining("Invalid email or password");
+
+        verify(userRepository, never()).findByEmailAndDeletedFalse(anyString());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
     }
 
     @Test
@@ -231,6 +249,8 @@ class AuthServiceTest {
         assertThat(response.expiresIn()).isEqualTo(900L);
         assertThat(response.user()).isSameAs(USER_RESPONSE);
         verify(refreshTokenRepository).save(any(RefreshToken.class));
+        // Đúng mật khẩu → reset counter brute-force (T6).
+        verify(loginAttemptService).clearFailures(EMAIL);
     }
 
     // ---- refresh ----

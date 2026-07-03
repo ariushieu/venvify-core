@@ -63,6 +63,7 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final EmailService emailService;
     private final UserMapper userMapper;
+    private final LoginAttemptService loginAttemptService;
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpirationMs;
@@ -100,12 +101,18 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmailAndDeletedFalse(request.email())
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
-        if (user.getPasswordHash() == null
-                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        // T6: account đang khóa vì sai quá nhiều → trả 401 y hệt sai mật khẩu, không lộ trạng thái khóa.
+        if (loginAttemptService.isLocked(request.email())) {
             throw new UnauthorizedException("Invalid email or password");
         }
+        User user = userRepository.findByEmailAndDeletedFalse(request.email()).orElse(null);
+        if (user == null || user.getPasswordHash() == null
+                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            // Đếm cả email không tồn tại — không phân biệt được từ ngoài, chống dò email luôn thể.
+            loginAttemptService.recordFailure(request.email());
+            throw new UnauthorizedException("Invalid email or password");
+        }
+        loginAttemptService.clearFailures(request.email());
         if (!user.isEmailVerified()) {
             throw new ForbiddenException("Email not verified");
         }
