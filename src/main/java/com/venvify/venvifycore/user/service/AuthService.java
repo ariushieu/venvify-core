@@ -42,7 +42,8 @@ import java.util.stream.Collectors;
 
 /**
  * Xác thực & quản lý phiên (CLAUDE.md §3-§5). Access JWT stateless + refresh stateful (rotation,
- * reuse-detection). Đăng ký tạo luôn ví USER (D12) và gửi email xác thực; login bị chặn tới khi verify.
+ * reuse-detection). Đăng ký tạo luôn ví USER (D12) và gửi OTP xác thực email; login bị chặn tới khi
+ * verify. Nhập đúng OTP thì phát luôn cặp token (auto sign-in).
  */
 @Slf4j
 @Service
@@ -51,6 +52,8 @@ public class AuthService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final int RAW_TOKEN_BYTES = 32;
+    /** OTP 6 số chỉ có 10^6 khả năng → khóa mã sau chừng này lần nhập sai để chặn brute force. */
+    private static final int MAX_OTP_ATTEMPTS = 5;
 
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
@@ -66,9 +69,6 @@ public class AuthService {
 
     @Value("${app.mail.verification-token-expiration}")
     private long verificationTokenExpirationMs;
-
-    @Value("${app.base-url}")
-    private String baseUrl;
 
     @Transactional
     public UserResponse register(CreateUserRequest request) {
@@ -149,15 +149,39 @@ public class AuthService {
         });
     }
 
+    /**
+     * Đối chiếu OTP với mã đang hiệu lực mới nhất của user. Đúng → đánh dấu verified và
+     * phát luôn cặp token (khỏi bắt đăng nhập lại); sai quá {@link #MAX_OTP_ATTEMPTS} lần → khóa mã.
+     */
     @Transactional
-    public void verifyEmail(String token) {
-        EmailVerificationToken evt = emailVerificationTokenRepository.findByTokenHash(sha256(token))
-                .orElseThrow(() -> new UnauthorizedException("Invalid verification token"));
-        if (!evt.isUsable(Instant.now())) {
-            throw new UnauthorizedException("Verification token expired or already used");
+    public AuthResponse verifyEmail(String email, String otp) {
+        User user = userRepository.findByEmailAndDeletedFalse(email)
+                .orElseThrow(() -> new UnauthorizedException("Invalid OTP"));
+        if (user.isEmailVerified()) {
+            throw new ConflictException("Email already verified");
         }
-        evt.setUsedAt(Instant.now());
-        evt.getUser().setEmailVerified(true);
+
+        Instant now = Instant.now();
+        EmailVerificationToken evt = emailVerificationTokenRepository
+                .findTopByUserIdAndUsedAtIsNullOrderByIdDesc(user.getId())
+                .filter(t -> t.isUsable(now))
+                .orElseThrow(() -> new UnauthorizedException("OTP expired — request a new code"));
+
+        if (!evt.getOtpHash().equals(sha256(otp))) {
+            evt.setAttempts(evt.getAttempts() + 1);
+            if (evt.getAttempts() >= MAX_OTP_ATTEMPTS) {
+                evt.setUsedAt(now);
+                throw new UnauthorizedException("Too many incorrect attempts — request a new code");
+            }
+            throw new UnauthorizedException("Incorrect OTP");
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new ForbiddenException("Account is not active");
+        }
+
+        evt.setUsedAt(now);
+        user.setEmailVerified(true);
+        return issueTokens(user);
     }
 
     @Transactional
@@ -174,16 +198,20 @@ public class AuthService {
     // ---- helpers ----
 
     private void sendVerification(User user) {
-        String rawToken = generateRawToken();
+        String otp = generateOtp();
         emailVerificationTokenRepository.save(EmailVerificationToken.builder()
                 .user(user)
-                .tokenHash(sha256(rawToken))
+                .otpHash(sha256(otp))
                 .expiresAt(Instant.now().plusMillis(verificationTokenExpirationMs))
                 .build());
-        String link = baseUrl + "/auth/verify-email?token=" + rawToken;
-        // Tiện dev khi email chưa tới (token trong DB là hash, không tra ngược được). Tắt ở prod.
-        log.debug("Email verification link for {}: {}", user.getEmail(), link);
-        emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), link);
+        // Tiện dev khi email chưa tới (DB chỉ lưu hash, không tra ngược được). Tắt ở prod.
+        log.debug("Email verification OTP for {}: {}", user.getEmail(), otp);
+        emailService.sendVerificationOtp(user.getEmail(), user.getFullName(), otp);
+    }
+
+    /** OTP 6 chữ số, zero-pad (000000–999999). */
+    private static String generateOtp() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
     private AuthResponse issueTokens(User user) {

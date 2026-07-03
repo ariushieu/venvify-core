@@ -11,9 +11,10 @@ import java.util.Optional;
 
 public interface EmailVerificationTokenRepository extends JpaRepository<EmailVerificationToken, Long> {
 
-    Optional<EmailVerificationToken> findByTokenHash(String tokenHash);
+    /** OTP đang hiệu lực mới nhất của user (mỗi lần gửi lại đều vô hiệu mã cũ trước). */
+    Optional<EmailVerificationToken> findTopByUserIdAndUsedAtIsNullOrderByIdDesc(Long userId);
 
-    /** Vô hiệu các token chưa dùng của user (khi gửi lại email xác thực). */
+    /** Vô hiệu các OTP chưa dùng của user (khi gửi lại mã xác thực). */
     @Modifying
     @Query("update EmailVerificationToken t set t.usedAt = :now where t.user.id = :userId and t.usedAt is null")
     void invalidateActiveByUserId(@Param("userId") Long userId, @Param("now") Instant now);

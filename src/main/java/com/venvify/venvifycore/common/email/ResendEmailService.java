@@ -32,13 +32,13 @@ public class ResendEmailService implements EmailService {
     }
 
     @Override
-    public void sendVerificationEmail(String toEmail, String fullName, String verificationLink) {
+    public void sendVerificationOtp(String toEmail, String fullName, String otp) {
         String html = """
                 <p>Xin chào %s,</p>
-                <p>Cảm ơn bạn đã đăng ký Venvify. Nhấp vào liên kết dưới đây để xác thực email:</p>
-                <p><a href="%s">Xác thực email</a></p>
-                <p>Liên kết có hiệu lực trong 24 giờ. Nếu bạn không đăng ký, hãy bỏ qua email này.</p>
-                """.formatted(fullName, verificationLink);
+                <p>Cảm ơn bạn đã đăng ký Venvify. Mã xác thực email của bạn là:</p>
+                <p style="font-size:32px;font-weight:700;letter-spacing:8px;font-family:monospace">%s</p>
+                <p>Mã có hiệu lực trong 10 phút. Nếu bạn không đăng ký, hãy bỏ qua email này.</p>
+                """.formatted(fullName, otp);
 
         try {
             restClient.post()

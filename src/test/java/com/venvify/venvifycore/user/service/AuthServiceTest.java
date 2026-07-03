@@ -31,9 +31,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.Set;
 
@@ -78,10 +82,9 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        // @Value fields aren't injected by @InjectMocks — set realistic positive TTLs + base url.
+        // @Value fields aren't injected by @InjectMocks — set realistic positive TTLs.
         ReflectionTestUtils.setField(authService, "refreshTokenExpirationMs", 604_800_000L);
-        ReflectionTestUtils.setField(authService, "verificationTokenExpirationMs", 86_400_000L);
-        ReflectionTestUtils.setField(authService, "baseUrl", "http://localhost:8080/api/v1");
+        ReflectionTestUtils.setField(authService, "verificationTokenExpirationMs", 600_000L);
     }
 
     private User activeUser() {
@@ -121,7 +124,7 @@ class AuthServiceTest {
 
         verify(userRepository, never()).save(any());
         verify(walletRepository, never()).save(any());
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
+        verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -153,7 +156,7 @@ class AuthServiceTest {
         assertThat(wallet.getBalanceCached()).isZero();
 
         verify(emailVerificationTokenRepository).save(any(EmailVerificationToken.class));
-        verify(emailService).sendVerificationEmail(eq(EMAIL), eq("Full Name"), anyString());
+        verify(emailService).sendVerificationOtp(eq(EMAIL), eq("Full Name"), anyString());
     }
 
     // ---- login ----
@@ -329,46 +332,126 @@ class AuthServiceTest {
 
     // ---- verifyEmail ----
 
-    @Test
-    void verifyEmail_unknownToken_throwsUnauthorized() {
-        when(emailVerificationTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.empty());
+    private static final String OTP = "123456";
 
-        assertThatThrownBy(() -> authService.verifyEmail("raw-token"))
+    /** Bản sao thuật toán hash của AuthService để dựng token có hash khớp OTP. */
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private EmailVerificationToken otpToken(User user, String otp, Instant expiresAt) {
+        return EmailVerificationToken.builder()
+                .user(user)
+                .otpHash(sha256(otp))
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    @Test
+    void verifyEmail_unknownEmail_throwsUnauthorized() {
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, OTP))
                 .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
-    void verifyEmail_usedOrExpiredToken_throwsUnauthorized() {
+    void verifyEmail_alreadyVerified_throwsConflict() {
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(activeUser()));
+
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, OTP))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void verifyEmail_noActiveOtp_throwsUnauthorized() {
         User user = activeUser();
         user.setEmailVerified(false);
-        EmailVerificationToken used = EmailVerificationToken.builder()
-                .user(user)
-                .tokenHash("hash")
-                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
-                .usedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
-                .build();
-        when(emailVerificationTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(used));
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(user));
+        when(emailVerificationTokenRepository.findTopByUserIdAndUsedAtIsNullOrderByIdDesc(1L))
+                .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.verifyEmail("raw-token"))
-                .isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, OTP))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("expired");
+    }
+
+    @Test
+    void verifyEmail_expiredOtp_throwsUnauthorized() {
+        User user = activeUser();
+        user.setEmailVerified(false);
+        EmailVerificationToken expired = otpToken(user, OTP, Instant.now().minus(1, ChronoUnit.MINUTES));
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(user));
+        when(emailVerificationTokenRepository.findTopByUserIdAndUsedAtIsNullOrderByIdDesc(1L))
+                .thenReturn(Optional.of(expired));
+
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, OTP))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("expired");
         assertThat(user.isEmailVerified()).isFalse();
     }
 
     @Test
-    void verifyEmail_validToken_marksUserVerifiedAndConsumesToken() {
+    void verifyEmail_wrongOtp_incrementsAttemptsAndKeepsTokenUsable() {
         User user = activeUser();
         user.setEmailVerified(false);
-        EmailVerificationToken token = EmailVerificationToken.builder()
-                .user(user)
-                .tokenHash("hash")
-                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
-                .build();
-        when(emailVerificationTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        EmailVerificationToken token = otpToken(user, OTP, Instant.now().plus(10, ChronoUnit.MINUTES));
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(user));
+        when(emailVerificationTokenRepository.findTopByUserIdAndUsedAtIsNullOrderByIdDesc(1L))
+                .thenReturn(Optional.of(token));
 
-        authService.verifyEmail("raw-token");
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, "000000"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("Incorrect");
+
+        assertThat(token.getAttempts()).isEqualTo(1);
+        assertThat(token.getUsedAt()).isNull();
+        assertThat(user.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    void verifyEmail_tooManyWrongAttempts_locksOtp() {
+        User user = activeUser();
+        user.setEmailVerified(false);
+        EmailVerificationToken token = otpToken(user, OTP, Instant.now().plus(10, ChronoUnit.MINUTES));
+        token.setAttempts(4); // lần sai này là lần thứ 5 → khóa
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(user));
+        when(emailVerificationTokenRepository.findTopByUserIdAndUsedAtIsNullOrderByIdDesc(1L))
+                .thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> authService.verifyEmail(EMAIL, "000000"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("Too many");
+
+        assertThat(token.getUsedAt()).isNotNull();
+        assertThat(user.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    void verifyEmail_correctOtp_marksVerifiedAndIssuesTokens() {
+        User user = activeUser();
+        user.setEmailVerified(false);
+        EmailVerificationToken token = otpToken(user, OTP, Instant.now().plus(10, ChronoUnit.MINUTES));
+        when(userRepository.findByEmailAndDeletedFalse(EMAIL)).thenReturn(Optional.of(user));
+        when(emailVerificationTokenRepository.findTopByUserIdAndUsedAtIsNullOrderByIdDesc(1L))
+                .thenReturn(Optional.of(token));
+        when(tokenProvider.generateAccessToken(eq("user-pid"), any())).thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
+        when(userMapper.toResponse(user)).thenReturn(USER_RESPONSE);
+
+        AuthResponse response = authService.verifyEmail(EMAIL, OTP);
 
         assertThat(user.isEmailVerified()).isTrue();
         assertThat(token.getUsedAt()).isNotNull();
+        // Auto sign-in: nhập đúng OTP là có luôn cặp token.
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.refreshToken()).isNotBlank();
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 
     // ---- resendVerification ----
@@ -380,7 +463,7 @@ class AuthServiceTest {
         authService.resendVerification(EMAIL);
 
         verify(emailVerificationTokenRepository, never()).save(any());
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
+        verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -391,7 +474,7 @@ class AuthServiceTest {
         authService.resendVerification(EMAIL);
 
         verify(emailVerificationTokenRepository, never()).invalidateActiveByUserId(any(), any());
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
+        verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -404,6 +487,6 @@ class AuthServiceTest {
 
         verify(emailVerificationTokenRepository).invalidateActiveByUserId(eq(1L), any(Instant.class));
         verify(emailVerificationTokenRepository).save(any(EmailVerificationToken.class));
-        verify(emailService).sendVerificationEmail(eq(EMAIL), eq("Full Name"), anyString());
+        verify(emailService).sendVerificationOtp(eq(EMAIL), eq("Full Name"), anyString());
     }
 }
