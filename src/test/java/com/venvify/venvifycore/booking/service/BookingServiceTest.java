@@ -309,6 +309,14 @@ class BookingServiceTest {
         assertThat(result.items()).containsExactly(RESPONSE);
     }
 
+    @Test
+    void listMine_rejectsOversizedPage() {
+        when(userRepository.findByPublicId(ATTENDEE_PID)).thenReturn(Optional.of(attendee));
+
+        assertThatThrownBy(() -> bookingService.listMine(ATTENDEE_PID, PageRequest.of(0, 101)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
     // ---- getDetail ----
 
     @Test

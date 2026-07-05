@@ -20,6 +20,19 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     Optional<Booking> findByPublicId(String publicId);
 
     /**
+     * Snapshot id-only trước khi khóa theo thứ tự Event → Booking. Không load entity vào
+     * persistence context, tránh dùng state cũ làm nguồn sự thật khi tới bước FOR UPDATE.
+     */
+    @Query("select b.id as id, b.event.id as eventId from Booking b where b.publicId = :publicId")
+    Optional<BookingLockIds> findLockIdsByPublicId(@Param("publicId") String publicId);
+
+    interface BookingLockIds {
+        Long getId();
+
+        Long getEventId();
+    }
+
+    /**
      * Khóa row booking — luồng transfer (tạo offer R-T1, accept) mutate attendee/transfer_count
      * an toàn trước race 2 accept song song. Thứ tự khóa toàn cục: Event → Booking → Wallet (§7).
      */

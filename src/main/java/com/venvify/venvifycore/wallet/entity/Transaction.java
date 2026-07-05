@@ -53,12 +53,12 @@ public class Transaction extends BaseEntity {
     @Column(name = "amount", nullable = false)
     private Long amount;
 
-    /** Khóa idempotency: callback VNPay/MoMo lặp cùng ref → bỏ qua, không tạo bút toán mới. */
+    /** Khóa idempotency: webhook/payment callback lặp cùng ref → bỏ qua, không tạo bút toán mới. */
     @Column(name = "transaction_ref", nullable = false, unique = true, length = 100)
     private String transactionRef;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_provider", length = 20)
+    @Column(name = "payment_provider", length = 30)
     private PaymentProvider paymentProvider;
 
     @Column(name = "provider_txn_id", length = 100)

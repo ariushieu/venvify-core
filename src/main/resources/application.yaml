@@ -19,10 +19,10 @@ spring:
     hibernate:
       # Flyway sở hữu schema; Hibernate chỉ đối chiếu entity ↔ schema, KHÔNG tự sửa.
       ddl-auto: validate
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         jdbc:
           # T1 (architecture §15): UTC toàn tuyến — DB lưu UTC, client tự render giờ treo tường
           # theo events.timezone. Đổi múi giờ hiển thị là việc của FE, không phải của storage.

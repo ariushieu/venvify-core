@@ -104,7 +104,7 @@ Vừa là **offer chuyển nhượng** vừa là **bản ghi lịch sử** (audi
 
 **Đính chính:** kiểm tra V1 thấy Hibernate sinh `@Enumerated(STRING)` trên MySQL thành **native `ENUM(...)`**, KHÔNG phải `VARCHAR` (vd `type enum('COMMISSION','PAYOUT',...)`). → Thêm giá trị enum **phải** `ALTER TABLE … MODIFY COLUMN … ENUM(...)` với danh sách mới (xếp **alphabet** để khớp Hibernate). Làm trong migration của slice tương ứng:
 - `TransactionType` += `TICKET_RESALE` → `alter table transactions modify column type enum('COMMISSION','PAYOUT','REFUND','TICKET_PURCHASE','TICKET_RESALE','TOPUP') not null;`
-- `PaymentProvider` += `SEPAY` → `alter table transactions modify column payment_provider enum('INTERNAL','MOMO','SEPAY','VNPAY');`
+- `PaymentProvider` += `SEPAY` ở Java enum; sau V5 `payment_provider` là VARCHAR nên **không cần DDL** khi thêm provider mới.
 - `BookingStatus`: đã có `RESERVED` → không thêm.
 
 ### 2.5 `wallets` — double-entry (D12)

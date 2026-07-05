@@ -22,11 +22,12 @@ import com.venvify.venvifycore.wallet.entity.Wallet;
 import com.venvify.venvifycore.wallet.enums.WalletAccountType;
 import com.venvify.venvifycore.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -45,7 +46,6 @@ import java.util.stream.Collectors;
  * reuse-detection). Đăng ký tạo luôn ví USER (D12) và gửi OTP xác thực email; login bị chặn tới khi
  * verify. Nhập đúng OTP thì phát luôn cặp token (auto sign-in).
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -211,9 +211,22 @@ public class AuthService {
                 .otpHash(sha256(otp))
                 .expiresAt(Instant.now().plusMillis(verificationTokenExpirationMs))
                 .build());
-        // Tiện dev khi email chưa tới (DB chỉ lưu hash, không tra ngược được). Tắt ở prod.
-        log.debug("Email verification OTP for {}: {}", user.getEmail(), otp);
-        emailService.sendVerificationOtp(user.getEmail(), user.getFullName(), otp);
+        sendVerificationAfterCommit(user.getEmail(), user.getFullName(), otp);
+    }
+
+    private void sendVerificationAfterCommit(String email, String fullName, String otp) {
+        Runnable send = () -> emailService.sendVerificationOtp(email, fullName, otp);
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            send.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                send.run();
+            }
+        });
     }
 
     /** OTP 6 chữ số, zero-pad (000000–999999). */

@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.wallet.service;
 
 import com.venvify.venvifycore.common.dto.PagedResponse;
+import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.enums.UserStatus;
@@ -115,6 +116,12 @@ class WalletServiceTest {
                 walletService.listMyEntries(USER_PID, PageRequest.of(0, 20));
 
         assertThat(result.items()).containsExactly(mapped);
+    }
+
+    @Test
+    void listMyEntries_rejectsOversizedPage() {
+        assertThatThrownBy(() -> walletService.listMyEntries(USER_PID, PageRequest.of(0, 101)))
+                .isInstanceOf(BadRequestException.class);
     }
 
     // ---- devTopup (R16 double-gate) ----

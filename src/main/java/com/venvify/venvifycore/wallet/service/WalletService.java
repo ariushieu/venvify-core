@@ -1,6 +1,7 @@
 package com.venvify.venvifycore.wallet.service;
 
 import com.venvify.venvifycore.common.dto.PagedResponse;
+import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
 import com.venvify.venvifycore.user.entity.User;
 import com.venvify.venvifycore.user.repository.UserRepository;
@@ -23,7 +24,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,7 +61,7 @@ public class WalletService {
     @Transactional(readOnly = true)
     public PagedResponse<LedgerEntryResponse> listMyEntries(String userPublicId, Pageable pageable) {
         Wallet wallet = requireWalletOf(userPublicId);
-        Page<LedgerEntry> page = ledgerEntryRepository.findByWalletIdOrderByIdDesc(wallet.getId(), pageable);
+        Page<LedgerEntry> page = ledgerEntryRepository.findByWalletIdOrderByIdDesc(wallet.getId(), safePageable(pageable));
         return PagedResponse.of(page.map(walletMapper::toEntryResponse));
     }
 
@@ -106,5 +109,15 @@ public class WalletService {
         // Đăng ký là có ví — thiếu là sự cố dữ liệu, không phải lỗi client.
         return walletRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new IllegalStateException("User " + user.getId() + " has no wallet"));
+    }
+
+    private static Pageable safePageable(Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged() || pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new BadRequestException("Invalid page or size");
+        }
+        Sort sort = pageable.getSort().isSorted()
+                ? pageable.getSort()
+                : Sort.by(Sort.Direction.DESC, "id");
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 }

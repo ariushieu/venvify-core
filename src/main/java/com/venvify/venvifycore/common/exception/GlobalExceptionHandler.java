@@ -2,6 +2,9 @@ package com.venvify.venvifycore.common.exception;
 
 import com.venvify.venvifycore.common.dto.ApiResponse;
 import com.venvify.venvifycore.common.dto.FieldValidationError;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +73,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PropertyReferenceException.class)
     public ResponseEntity<ApiResponse<Void>> handleInvalidSort(PropertyReferenceException ex) {
         return build(HttpStatus.BAD_REQUEST, "Invalid sort property: '" + ex.getPropertyName() + "'");
+    }
+
+    @ExceptionHandler({
+            OptimisticLockingFailureException.class,
+            PessimisticLockingFailureException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleLockConflict(Exception ex) {
+        return build(HttpStatus.CONFLICT, "Resource was modified concurrently; please retry");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        return build(HttpStatus.CONFLICT, "Request conflicts with existing data");
     }
 
     @ExceptionHandler(Exception.class)

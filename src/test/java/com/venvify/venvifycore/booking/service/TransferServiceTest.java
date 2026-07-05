@@ -45,6 +45,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -102,9 +103,14 @@ class TransferServiceTest {
         booking.setId(500L);
         booking.setPublicId("bkg-pid");
 
+        BookingRepository.BookingLockIds bookingIds = mock(BookingRepository.BookingLockIds.class);
+        lenient().when(bookingIds.getId()).thenReturn(500L);
+        lenient().when(bookingIds.getEventId()).thenReturn(100L);
+
         lenient().when(userService.getByPublicId("sender-pid")).thenReturn(sender);
         lenient().when(userService.getByPublicId("receiver-pid")).thenReturn(receiver);
         lenient().when(bookingRepository.findByPublicId("bkg-pid")).thenReturn(Optional.of(booking));
+        lenient().when(bookingRepository.findLockIdsByPublicId("bkg-pid")).thenReturn(Optional.of(bookingIds));
         lenient().when(bookingRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(booking));
         lenient().when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(event));
         lenient().when(userService.resolveActiveByEmailOrHandle("receiver@venvify.com", null))
@@ -137,6 +143,12 @@ class TransferServiceTest {
                 .build();
         transfer.setId(800L);
         transfer.setPublicId("tt-pid");
+        TicketTransferRepository.TransferLockIds ids = mock(TicketTransferRepository.TransferLockIds.class);
+        lenient().when(ids.getId()).thenReturn(800L);
+        lenient().when(ids.getBookingId()).thenReturn(500L);
+        lenient().when(ids.getEventId()).thenReturn(100L);
+        lenient().when(transferRepository.findLockIdsByPublicId("tt-pid")).thenReturn(Optional.of(ids));
+        lenient().when(transferRepository.findById(800L)).thenReturn(Optional.of(transfer));
         lenient().when(transferRepository.findByPublicId("tt-pid")).thenReturn(Optional.of(transfer));
         return transfer;
     }
@@ -164,8 +176,20 @@ class TransferServiceTest {
 
     @Test
     void create_notTicketOwner_forbidden() {
-        assertThatThrownBy(() -> transferService.createOffer("receiver-pid", "bkg-pid", request(0L)))
+        User stranger = user(3L, "stranger-pid");
+        when(userService.getByPublicId("stranger-pid")).thenReturn(stranger);
+
+        assertThatThrownBy(() -> transferService.createOffer("stranger-pid", "bkg-pid", request(0L)))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void create_ownerChangedUnderLock_forbidden() {
+        booking.setAttendee(receiver);
+
+        assertThatThrownBy(() -> transferService.createOffer("sender-pid", "bkg-pid", request(0L)))
+                .isInstanceOf(ForbiddenException.class);
+        verify(transferRepository, never()).save(any());
     }
 
     @Test

@@ -12,7 +12,7 @@ This service owns the entire core business logic layer, enforcing ACID-compliant
 |---|---|
 | Framework | Spring Boot 4.1.0 |
 | Language | Java 21 |
-| Security & Auth | Spring Security · JWT (Access & Refresh Token) · Spring Cloud OAuth2 (Google) |
+| Security & Auth | Spring Security · JWT (Access & Refresh Token) · Email verification |
 | Data Access | Spring Data JPA (Hibernate) |
 | Database | MySQL 8.0 |
 | Build Tool | Maven |
@@ -24,7 +24,7 @@ This service owns the entire core business logic layer, enforcing ACID-compliant
 
 ### Hybrid ID System
 - **Internal PK:** `Long (Auto-Increment)` — optimizes index performance and `JOIN` efficiency in MySQL.
-- **Public ID:** `UUID v4 (String-36)` — exposed on all API endpoints to prevent **IDOR** (Insecure Direct Object Reference) vulnerabilities and conceal internal growth metrics.
+- **Public ID:** `UUIDv7 (String-36)` — exposed on API endpoints to prevent **IDOR** (Insecure Direct Object Reference) vulnerabilities while keeping indexes more time-local than UUIDv4.
 
 ### Database per Service
 Fully isolated data ownership. `venvify-core` connects exclusively to its own MySQL instance and communicates with the real-time service (Node.js) only via REST API secured with an internal token.
@@ -41,10 +41,10 @@ Strictly follows **SOLID** principles and enterprise-grade Clean Code standards 
 
 | # | Module | Description |
 |---|---|---|
-| 1 | **Auth & Profile** | Traditional email registration with advanced password hashing · Google OAuth2 integration · Role-based access control (Host, Attendee, Admin) |
-| 2 | **Event Management** | Full CRUD for event data · Auto-generated SEO-friendly slugs · Event lifecycle state machine (Draft → Published → Ongoing → Completed / Canceled) |
-| 3 | **Slot & Booking** | Booking request intake · Real-time slot availability checks · Temporary slot locking during payment flow |
-| 4 | **Wallet & Escrow** | VNPay/MoMo payment gateway integration · In-app wallet top-up · Escrow holding of ticket revenue until event completion · Automatic commission deduction and host disbursement |
+| 1 | **Auth & Profile** | Email registration/login · Refresh-token rotation · Email OTP verification · Role-based access control |
+| 2 | **Event Management** | Event CRUD · SEO-friendly slugs · Draft/Published/Cancelled lifecycle · host/admin cancellation refund flow |
+| 3 | **Slot & Booking** | Wallet-funded booking · event-row locking against oversell · ticket transfer/resale via wallet |
+| 4 | **Wallet & Escrow** | Double-entry ledger · internal wallet · escrow hold/refund/release · dev-only top-up outside prod; Sepay/OAuth/payout are planned P2 slices |
 
 ---
 
@@ -77,7 +77,7 @@ docker-compose up -d
 ./mvnw spring-boot:run
 ```
 
-The API will be available at `http://localhost:8080`.
+The API will be available at `http://localhost:8080/api/v1`.
 
 ---
 
@@ -105,6 +105,12 @@ venvify-core/
 | `MYSQL_ROOT_PASSWORD` | MySQL root password |
 | `MYSQL_USER` | Application database user |
 | `MYSQL_PASSWORD` | Application database password |
+| `SECRET_KEY` | JWT HS256 secret, at least 32 bytes |
+| `RESEND_API_KEY` | Resend API key for outbound email |
+| `RESEND_FROM_EMAIL` | Sender address, defaults to `onboarding@resend.dev` |
+| `APP_CORS_ALLOWED_ORIGINS` | CSV list of allowed frontend origins |
+| `APP_LOG_LEVEL` | Application logger level, defaults to `INFO` |
+| `SQL_LOG_LEVEL` | Hibernate SQL logger level, defaults to `WARN` |
 
 > Copy `.env.example` to `.env` — the `.env` file is gitignored and must never be committed.
 

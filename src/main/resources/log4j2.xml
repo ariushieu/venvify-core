@@ -26,7 +26,7 @@
 
     <Loggers>
         <!-- Application Logger -->
-        <Logger name="com.venvify" level="DEBUG" additivity="false">
+        <Logger name="com.venvify" level="${env:APP_LOG_LEVEL:-INFO}" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="FileAppender"/>
         </Logger>
@@ -37,7 +37,7 @@
         </Logger>
 
         <!-- Hibernate SQL -->
-        <Logger name="org.hibernate.SQL" level="DEBUG" additivity="false">
+        <Logger name="org.hibernate.SQL" level="${env:SQL_LOG_LEVEL:-WARN}" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
 
