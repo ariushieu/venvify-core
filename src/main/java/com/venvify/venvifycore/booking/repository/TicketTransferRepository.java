@@ -17,6 +17,22 @@ public interface TicketTransferRepository extends JpaRepository<TicketTransfer, 
 
     Optional<TicketTransfer> findByPublicId(String publicId);
 
+    /**
+     * Snapshot id-only để accept lock đúng thứ tự Event → Booking rồi mới load transfer.
+     * Tránh việc load transfer/booking/event trước lock rồi re-check trên state cũ.
+     */
+    @Query("select t.id as id, t.booking.id as bookingId, t.booking.event.id as eventId "
+            + "from TicketTransfer t where t.publicId = :publicId")
+    Optional<TransferLockIds> findLockIdsByPublicId(@Param("publicId") String publicId);
+
+    interface TransferLockIds {
+        Long getId();
+
+        Long getBookingId();
+
+        Long getEventId();
+    }
+
     /** Load đủ đồ cho notification listener soạn nội dung — 1 câu, không N+1. */
     @EntityGraph(attributePaths = {"booking", "booking.event", "fromUser", "toUser"})
     Optional<TicketTransfer> findWithDetailsById(Long id);

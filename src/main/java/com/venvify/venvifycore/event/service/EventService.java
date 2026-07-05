@@ -4,6 +4,8 @@ import com.venvify.venvifycore.common.dto.PagedResponse;
 import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ForbiddenException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
+import com.venvify.venvifycore.booking.enums.BookingStatus;
+import com.venvify.venvifycore.booking.repository.BookingRepository;
 import com.venvify.venvifycore.common.util.SlugGenerator;
 import com.venvify.venvifycore.event.domain.EventCancelledEvent;
 import com.venvify.venvifycore.event.domain.EventPublishedEvent;
@@ -24,6 +26,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +47,7 @@ public class EventService {
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
     private final UserRepository userRepository;
+    private final BookingRepository bookingRepository;
     private final EscrowService escrowService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -128,7 +132,7 @@ public class EventService {
      */
     @Transactional
     public EventResponse cancel(String userPublicId, String eventPublicId) {
-        return doCancel(requireOwnedEvent(userPublicId, eventPublicId));
+        return doCancel(requireOwnedEventForUpdate(userPublicId, eventPublicId));
     }
 
     /**
@@ -138,16 +142,13 @@ public class EventService {
      */
     @Transactional
     public EventResponse cancelAsAdmin(String eventPublicId) {
-        return doCancel(requireExistingEvent(eventPublicId));
+        return doCancel(requireExistingEventForUpdate(eventPublicId));
     }
 
-    private EventResponse doCancel(Event event) {
-        if (event.getStatus() != EventStatus.DRAFT && event.getStatus() != EventStatus.PUBLISHED) {
+    private EventResponse doCancel(Event locked) {
+        if (locked.getStatus() != EventStatus.DRAFT && locked.getStatus() != EventStatus.PUBLISHED) {
             throw new BadRequestException("Only draft or published events can be cancelled");
         }
-
-        Event locked = eventRepository.findByIdForUpdate(event.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         locked.setStatus(EventStatus.CANCELLED);
         escrowService.refundHeldForEvent(locked);
 
@@ -161,10 +162,15 @@ public class EventService {
     /** Soft delete (plan §2): chỉ cho phép với DRAFT hoặc CANCELLED. */
     @Transactional
     public void delete(String userPublicId, String eventPublicId) {
-        Event event = requireOwnedEvent(userPublicId, eventPublicId);
+        Event event = requireOwnedEventForUpdate(userPublicId, eventPublicId);
 
         if (event.getStatus() != EventStatus.DRAFT && event.getStatus() != EventStatus.CANCELLED) {
             throw new BadRequestException("Only draft or cancelled events can be deleted");
+        }
+        long activeBookings = bookingRepository.countByEventIdAndStatusIn(event.getId(),
+                List.of(BookingStatus.RESERVED, BookingStatus.CONFIRMED, BookingStatus.ATTENDED));
+        if (activeBookings > 0) {
+            throw new BadRequestException("Cannot delete an event with active bookings");
         }
 
         event.setDeleted(true);
@@ -175,7 +181,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public PagedResponse<EventResponse> listMine(String userPublicId, Pageable pageable) {
         User host = requireUser(userPublicId);
-        Page<Event> page = eventRepository.findByHostIdAndDeletedFalse(host.getId(), pageable);
+        Page<Event> page = eventRepository.findByHostIdAndDeletedFalse(host.getId(), safePageable(pageable));
         return PagedResponse.of(page.map(eventMapper::toResponse));
     }
 
@@ -255,8 +261,25 @@ public class EventService {
         return event;
     }
 
+    private Event requireExistingEventForUpdate(String eventPublicId) {
+        Event event = eventRepository.findByPublicIdForUpdate(eventPublicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        if (event.isDeleted()) {
+            throw new ResourceNotFoundException("Event not found");
+        }
+        return event;
+    }
+
     private Event requireOwnedEvent(String userPublicId, String eventPublicId) {
         Event event = requireExistingEvent(eventPublicId);
+        if (!isOwner(event, userPublicId)) {
+            throw new ForbiddenException("You do not own this event");
+        }
+        return event;
+    }
+
+    private Event requireOwnedEventForUpdate(String userPublicId, String eventPublicId) {
+        Event event = requireExistingEventForUpdate(eventPublicId);
         if (!isOwner(event, userPublicId)) {
             throw new ForbiddenException("You do not own this event");
         }
@@ -271,6 +294,16 @@ public class EventService {
         boolean startChanged = request.startTime() != null && !request.startTime().equals(event.getStartTime());
         boolean endChanged = request.endTime() != null && !request.endTime().equals(event.getEndTime());
         return startChanged || endChanged;
+    }
+
+    private static Pageable safePageable(Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged() || pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new BadRequestException("Invalid page or size");
+        }
+        Sort sort = pageable.getSort().isSorted()
+                ? pageable.getSort()
+                : Sort.by(Sort.Direction.DESC, "id");
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     /** Slug từ title; nếu trùng thì thêm hậu tố ngắn. Unique constraint trên cột slug là chốt cuối. */

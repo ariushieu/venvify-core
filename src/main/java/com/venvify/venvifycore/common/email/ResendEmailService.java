@@ -36,6 +36,7 @@ public class ResendEmailService implements EmailService {
     }
 
     @Override
+    @Async("emailExecutor")
     public void sendVerificationOtp(String toEmail, String fullName, String otp) {
         // Template theo design system "Ink & Spotlight" của FE (canvas sáng + thẻ live-pass đen,
         // mã vàng glow). Table + inline style vì email client không ăn CSS hiện đại;

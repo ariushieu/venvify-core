@@ -22,6 +22,10 @@ public interface EventRepository extends JpaRepository<Event, Long>, EventSearch
 
     Optional<Event> findByPublicId(String publicId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from Event e where e.publicId = :publicId")
+    Optional<Event> findByPublicIdForUpdate(@Param("publicId") String publicId);
+
     Optional<Event> findBySlugAndDeletedFalse(String slug);
 
     boolean existsBySlug(String slug);

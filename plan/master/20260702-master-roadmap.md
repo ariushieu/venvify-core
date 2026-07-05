@@ -81,7 +81,7 @@
 ## 3. Quyết định xuyên suốt
 
 ### 3.1 Đã chốt (không mở lại trừ khi user yêu cầu)
-D1–D7 (ERD), D8–D13 (transfer/payment/double-entry/event-time), O-M1..O-M4 (money-core: commission 5%, vé paid không tự hủy, auto-ENDED + delay release 3 ngày, dev-topup tắt ở prod) — xem các plan tương ứng. **Payment provider = Sepay** (D11, thay VNPay/MoMo của SPEC).
+D1–D7 (ERD), D8–D13 (transfer/payment/double-entry/event-time), O-M1..O-M4 (money-core: commission 5%, vé paid không tự hủy, auto-ENDED + delay release 3 ngày, dev-topup tắt ở prod) — xem các plan tương ứng. **Payment provider = Sepay** (D11, thay lựa chọn payment provider ban đầu).
 
 ### 3.2 Phải chốt theo lịch (mỗi cái có deadline — quá hạn là nghẽn phase)
 
@@ -126,10 +126,10 @@ D1–D7 (ERD), D8–D13 (transfer/payment/double-entry/event-time), O-M1..O-M4 (
 
 | SPEC nói | Thực tế đã chốt |
 |---|---|
-| Payment VNPay/MoMo | **Sepay** (bank watcher + webhook; không giữ tiền, không disbursement) — D11 |
+| Payment provider ban đầu | **Sepay** (bank watcher + webhook; không giữ tiền, không disbursement) — D11 |
 | §3.3 "mọi luồng tiền qua ví, không có nhánh thanh toán trực tiếp" | Nới theo D11: cho phép **QR trả thẳng vào escrow** (BANK_CLEARING → ESCROW) — vẫn 100% qua ledger, chỉ không ép nạp ví trước. Tinh thần RULE (nhất quán sổ kép) giữ nguyên |
 | Commission "vd 10%" | **5%** (O-M1, config) |
-| Spring Boot 3.x | **4.1** (Java 21, JUnit 6) |
+| Spring Boot legacy line | **4.1** (Java 21, JUnit 6) |
 | Node.js + Socket.IO là DECISION | Hạ xuống **OPEN (O-MP1)** — LiveKit có thể nuốt vai trò signaling; chốt bằng PoC đầu P4 |
 | Escrow release khi event xong | + **delay 3 ngày** dispute window (O-M3) |
 | §8 timeline 6 giai đoạn | Thay bằng §4 roadmap này (đang sớm hơn ~1 tháng) |

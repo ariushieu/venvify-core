@@ -4,6 +4,7 @@ import com.venvify.venvifycore.common.dto.PagedResponse;
 import com.venvify.venvifycore.common.exception.BadRequestException;
 import com.venvify.venvifycore.common.exception.ForbiddenException;
 import com.venvify.venvifycore.common.exception.ResourceNotFoundException;
+import com.venvify.venvifycore.booking.repository.BookingRepository;
 import com.venvify.venvifycore.event.domain.EventCancelledEvent;
 import com.venvify.venvifycore.event.domain.EventPublishedEvent;
 import com.venvify.venvifycore.event.dto.CreateEventRequest;
@@ -54,6 +55,8 @@ class EventServiceTest {
     private EventMapper eventMapper;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private BookingRepository bookingRepository;
     @Mock
     private EscrowService escrowService;
     @Mock
@@ -319,8 +322,7 @@ class EventServiceTest {
     @Test
     void cancel_publishedEvent_setsCancelledAndRefundsEscrow() {
         Event published = event(EventStatus.PUBLISHED);
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(published));
-        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(published));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(published));
         when(eventRepository.save(published)).thenReturn(published);
         when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
 
@@ -335,7 +337,7 @@ class EventServiceTest {
 
     @Test
     void cancel_endedEvent_throwsBadRequest() {
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(event(EventStatus.ENDED)));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(event(EventStatus.ENDED)));
 
         assertThatThrownBy(() -> eventService.cancel(OWNER_PID, "evt-pid"))
                 .isInstanceOf(BadRequestException.class);
@@ -346,8 +348,7 @@ class EventServiceTest {
     void cancelAsAdmin_takedownWithoutOwnership_reusesRefundFlow() {
         // P6 §4: admin không phải chủ event vẫn takedown được — cùng luồng refund duy nhất.
         Event published = event(EventStatus.PUBLISHED);
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(published));
-        when(eventRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(published));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(published));
         when(eventRepository.save(published)).thenReturn(published);
         when(eventMapper.toResponse(published)).thenReturn(RESPONSE);
 
@@ -361,7 +362,7 @@ class EventServiceTest {
     @Test
     void delete_draftEvent_setsDeletedFlag() {
         Event draft = event(EventStatus.DRAFT);
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(draft));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(draft));
         when(eventRepository.save(draft)).thenReturn(draft);
 
         eventService.delete(OWNER_PID, "evt-pid");
@@ -372,7 +373,7 @@ class EventServiceTest {
 
     @Test
     void delete_publishedEvent_throwsBadRequest() {
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(event(EventStatus.PUBLISHED)));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(event(EventStatus.PUBLISHED)));
 
         assertThatThrownBy(() -> eventService.delete(OWNER_PID, "evt-pid"))
                 .isInstanceOf(BadRequestException.class);
@@ -382,10 +383,22 @@ class EventServiceTest {
     void delete_alreadyDeletedEvent_throwsNotFound() {
         Event draft = event(EventStatus.DRAFT);
         draft.setDeleted(true);
-        when(eventRepository.findByPublicId("evt-pid")).thenReturn(Optional.of(draft));
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> eventService.delete(OWNER_PID, "evt-pid"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void delete_cancelledEventWithActiveBookings_throwsBadRequest() {
+        Event cancelled = event(EventStatus.CANCELLED);
+        when(eventRepository.findByPublicIdForUpdate("evt-pid")).thenReturn(Optional.of(cancelled));
+        when(bookingRepository.countByEventIdAndStatusIn(eq(100L), any())).thenReturn(1L);
+
+        assertThatThrownBy(() -> eventService.delete(OWNER_PID, "evt-pid"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("active bookings");
+        verify(eventRepository, never()).save(any());
     }
 
     // ---- detail / list ----
@@ -430,5 +443,13 @@ class EventServiceTest {
         PagedResponse<EventResponse> result = eventService.listMine(OWNER_PID, pageable);
 
         assertThat(result.items()).containsExactly(RESPONSE);
+    }
+
+    @Test
+    void listMine_rejectsOversizedPage() {
+        when(userRepository.findByPublicId(OWNER_PID)).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> eventService.listMine(OWNER_PID, PageRequest.of(0, 101)))
+                .isInstanceOf(BadRequestException.class);
     }
 }

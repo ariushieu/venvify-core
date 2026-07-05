@@ -23,7 +23,7 @@
 
 ### 0.2 Quy ước áp dụng cho MỌI bảng (SPEC §5.5)
 - `id` — `BIGINT AUTO_INCREMENT PRIMARY KEY` — khóa nội bộ, dùng cho FK/join, **KHÔNG expose**.
-- `public_id` — `CHAR(36)` UUID, `UNIQUE NOT NULL` — ID công khai cho API/FE.
+- `public_id` — `CHAR(36)` UUIDv7, `UNIQUE NOT NULL` — ID công khai cho API/FE.
 - Mọi FK trỏ tới cột `id` (BIGINT) nội bộ, không dùng `public_id` cho quan hệ.
 
 ### 0.3 Base class (giảm lặp) — BẮT BUỘC mọi entity kế thừa
@@ -33,13 +33,13 @@
 | Trường | Cột DB | Kiểu | Annotation | Ghi chú |
 |---|---|---|---|---|
 | `id` | `id` | `Long` / BIGINT | `@Id @GeneratedValue(IDENTITY)` | khóa nội bộ, KHÔNG expose |
-| `publicId` | `public_id` | `String` / CHAR(36) | `@Column(unique, updatable=false)` | UUID, sinh ở `@PrePersist`; ID công khai |
+| `publicId` | `public_id` | `String` / CHAR(36) | `@Column(unique, updatable=false)` | UUIDv7, sinh ở `@PrePersist`; ID công khai |
 | `createdAt` | `created_at` | `Instant` | `@CreatedDate @Column(updatable=false)` | bạn đã nghĩ ra |
 | `updatedAt` | `updated_at` | `Instant` | `@LastModifiedDate` | bạn đã nghĩ ra |
 | `version` | `version` | `Long` | `@Version` | **thêm** — optimistic locking, chống ghi đè đồng thời (quan trọng cho tiền/slot) |
 
 - `createdAt`/`updatedAt` tự động qua Spring Data JPA Auditing → cần bật `@EnableJpaAuditing` ở config.
-- `publicId` sinh bằng `UUID` trong `@PrePersist` (không để DB sinh, để app kiểm soát).
+- `publicId` sinh bằng UUIDv7 trong `@PrePersist` (không để DB sinh, để app kiểm soát).
 
 **`SoftDeletableEntity extends BaseEntity`** — chỉ entity cần xóa mềm mới kế thừa cái này:
 | Trường | Cột DB | Kiểu | Ghi chú |
@@ -176,13 +176,13 @@
 | status | VARCHAR(20) | NOT NULL | PENDING/SUCCESS/FAILED/CANCELLED |
 | amount | BIGINT | NOT NULL | VND |
 | transaction_ref | VARCHAR(100) | UNIQUE, NOT NULL | **idempotency key** |
-| payment_provider | VARCHAR(20) | NULL | VNPAY/MOMO/INTERNAL |
+| payment_provider | VARCHAR(30) | NULL | INTERNAL hiện dùng; SEPAY ở P2; các provider cũ chỉ là legacy placeholder từ V1 |
 | provider_txn_id | VARCHAR(100) | NULL | mã giao dịch phía cổng |
 | user_id | BIGINT | FK→users.id, NOT NULL | chủ giao dịch |
 | event_id | BIGINT | FK→events.id, NULL | nếu liên quan event |
 | created_at, updated_at | | | base |
 
-- **RULE (idempotency):** `UNIQUE(transaction_ref)`. Callback VNPay/MoMo lặp lại với cùng ref → bỏ qua, không tạo bút toán mới.
+- **RULE (idempotency):** `UNIQUE(transaction_ref)`. Webhook/payment callback lặp lại với cùng ref → bỏ qua, không tạo bút toán mới.
 - Index: `UNIQUE(transaction_ref)`, `INDEX(type)`, `INDEX(status)`, `INDEX(user_id)`.
 
 ### 2.7 `escrow_holds`
@@ -262,7 +262,7 @@ id, public_id, `user_id` FK, `type` VARCHAR(40), `title` VARCHAR(200), `content`
 | BookingStatus | RESERVED, CONFIRMED, CANCELLED, REFUNDED, ATTENDED, NO_SHOW |
 | TransactionType | TOPUP, TICKET_PURCHASE, REFUND, PAYOUT, COMMISSION |
 | TransactionStatus | PENDING, SUCCESS, FAILED, CANCELLED |
-| PaymentProvider | VNPAY, MOMO, INTERNAL |
+| PaymentProvider | INTERNAL (provider cũ là legacy placeholder), SEPAY ở P2 |
 | EscrowStatus | HELD, RELEASED, REFUNDED, PAID_OUT |
 | RoomStatus | WAITING, LIVE, ENDED |
 | PollStatus | OPEN, CLOSED |

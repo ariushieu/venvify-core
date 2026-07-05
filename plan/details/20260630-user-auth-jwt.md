@@ -96,7 +96,7 @@ user/controller/UserController.java        # /users/me
 user/entity/RefreshToken.java
 user/repository/RefreshTokenRepository.java
 src/main/resources/db/migration/V3__refresh_tokens.sql
-pom.xml (deps) · application.yaml (jwt.*) · .env (JWT_SECRET)
+pom.xml (deps) · application.yaml (jwt.*) · .env (SECRET_KEY)
 ```
 
 ## 7. OPEN — cần bạn xác nhận

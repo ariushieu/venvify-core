@@ -22,14 +22,14 @@
 
 ### 1.1 Vấn đề
 - Host phải ghép nhiều tool rời rạc: Eventbrite (đăng ký) + Zoom (họp) + Google Form (phản hồi).
-- Không có nền tảng nội địa hỗ trợ thanh toán VNPay/MoMo cho sự kiện trực tuyến.
+- Không có nền tảng nội địa hỗ trợ luồng VietQR/Sepay tích hợp cho sự kiện trực tuyến.
 - Sau sự kiện nội dung thất lạc: không replay, không tóm tắt.
 - Attendee thiếu công cụ tương tác có cấu trúc (Q&A, poll, raise hand) — phải dùng tool thứ 3.
 
 ### 1.2 Giải pháp
 - Một nền tảng: tạo event → bán vé → host room WebRTC → tương tác live → replay + AI summary.
 - Nhiều event chạy song song, hoàn toàn độc lập.
-- Thanh toán nội địa (VNPay, MoMo) qua ví in-app.
+- Thanh toán nội địa qua VietQR/Sepay và ví in-app.
 - Host có storefront riêng, build audience theo thời gian.
 
 ---
@@ -47,7 +47,7 @@
 | Host tạo & tổ chức event hoàn toàn trên nền tảng | Không redirect sang tool ngoài |
 | Attendee claim slot và vào room nhanh | ≤ 3 click từ trang event đến trong room |
 | Nhiều event diễn ra đồng thời không ảnh hưởng nhau | ≥ N room WebRTC độc lập song song |
-| Host kiếm doanh thu từ sự kiện | Thanh toán VNPay/MoMo hoạt động end-to-end |
+| Host kiếm doanh thu từ sự kiện | Thanh toán Sepay/VietQR hoạt động end-to-end |
 | Nội dung được lưu trữ và tóm tắt | Replay + AI summary sinh ra ≤ 5 phút sau event |
 
 ---
@@ -67,14 +67,14 @@
 ### 3.2 Attendee — tham dự event
 1. Discover qua trang chủ / tìm kiếm / link trực tiếp.
 2. Xem chi tiết event: mô tả, thời gian, slot còn lại, giá vé.
-3. Claim slot: đăng nhập → nếu paid thì **trừ ví in-app** (nạp ví trước qua VNPay/MoMo nếu chưa đủ số dư) → nhận email xác nhận.
+3. Claim slot: đăng nhập → nếu paid thì **trừ ví in-app** (nạp ví trước qua Sepay/VietQR nếu chưa đủ số dư) → nhận email xác nhận.
 4. Nhận reminder trước event (email/notification).
 5. Vào room đúng giờ: click link → WebRTC room mở trên trình duyệt.
 6. Trong room: chat sidebar, raise hand, vote poll, submit/upvote Q&A.
 7. Sau event: xem replay, đọc AI summary, để lại review.
 
 ### 3.3 Thanh toán & payout
-- Attendee nạp ví in-app qua VNPay/MoMo.
+- Attendee nạp ví in-app qua Sepay/VietQR.
 - Mua vé → **trừ ví** (ghi nhận giao dịch ngay vào ledger).
 - Platform giữ tiền trong **escrow** cho đến khi event kết thúc.
 - Sau event: platform thu **commission (vd 10%)**, phần còn lại chuyển vào ví Host.
@@ -111,7 +111,7 @@
 |---|---|
 | Attendee claim slot (tạo booking) | Must |
 | Thanh toán qua ví in-app | Must |
-| Nạp ví qua VNPay / MoMo | Must |
+| Nạp ví qua Sepay / VietQR | Must |
 | Email xác nhận booking | Must |
 | Lịch sử booking của Attendee | Should |
 
@@ -184,12 +184,12 @@
 
 | Thành phần | Công nghệ | Vai trò |
 |---|---|---|
-| Backend chính | Spring Boot 3.x, Spring Security (JWT), Spring Data JPA | Nghiệp vụ core |
+| Backend chính | Spring Boot 4.1, Java 21, Spring Security (JWT), Spring Data JPA | Nghiệp vụ core |
 | Real-time Service | Node.js, Socket.IO, WebRTC (SFU — `OPEN`, chốt sau) | Signaling, chat, poll, Q&A |
 | TURN/STUN | coturn (hoặc TURN của giải pháp SFU) | `RULE:` Bắt buộc — peer sau NAT/firewall |
 | Database | **MySQL (InnoDB)** | `DECISION:` Toàn bộ nghiệp vụ + lịch sử chat/poll/Q&A. (Không dùng MongoDB) |
 | Cache / Realtime state | Redis | Session, state ephemeral trong room (raise hand, poll đang mở), rate limiting |
-| Payment | VNPay API, MoMo API | Nạp ví, thanh toán |
+| Payment | Sepay webhook + VietQR | Nạp ví, đối soát tiền vào bank platform |
 | AI Summary | OpenAI Whisper + GPT API | Transcribe → tóm tắt (từ transcript, giới hạn token) |
 | Storage | AWS S3 / DigitalOcean Spaces | Recording, avatar, thumbnail |
 | DevOps | Docker, GitHub Actions, Nginx | CI/CD, reverse proxy, SSL |
@@ -207,17 +207,17 @@
 ### 5.5 Quy ước ID cho bảng dữ liệu
 - `RULE:` Mỗi bảng có **2 cột ID**:
   - **`id` BIGINT auto-increment** — khóa chính nội bộ, chỉ dùng cho join/quan hệ trong DB. KHÔNG expose ra ngoài.
-  - **`public_id` VARCHAR (UUID)** — ID công khai, dùng cho API/FE.
+  - **`public_id` VARCHAR (UUIDv7)** — ID công khai, dùng cho API/FE.
 
 ### 5.6 Thiết kế phần tiền (Wallet & Payment)
 `RULE:` Tiền không được sai một xu. Bốn nguyên tắc bắt buộc:
 
 1. **Ledger append-only** — KHÔNG lưu số dư bằng cột `balance` cộng/trừ. Dùng bảng bút toán chỉ-thêm (mỗi dòng = một entry có dấu +/-); số dư = tổng các dòng. Audit được, không mất tiền do race.
-2. **Idempotency cho IPN** — callback VNPay/MoMo có thể lặp. Mỗi giao dịch có `transaction_ref` duy nhất; lần lặp phải bị bỏ qua, không cộng ví 2 lần.
+2. **Idempotency cho webhook** — webhook Sepay có thể lặp. Mỗi giao dịch có `transaction_ref` duy nhất; lần lặp phải bị bỏ qua, không cộng ví 2 lần.
 3. **Khóa khi trừ tiền** — dùng transaction DB + `SELECT ... FOR UPDATE` (InnoDB) khi trừ ví, tránh hai request đồng thời trừ trên số dư cũ.
 4. **Máy trạng thái escrow** — `held → released → paid_out`, nhánh `refunded`. Xử lý đủ ca: host hủy (refund attendee), event lỗi kỹ thuật (refund/credit), attendee không tới (vẫn tính tiền host).
 
-> `RULE (payout MVP):` VNPay/MoMo chưa cho chuyển tiền tự do ra ngân hàng người khác nếu chưa có hợp đồng doanh nghiệp/disbursement API. MVP: hệ thống tính đúng số tiền + đánh dấu trạng thái, admin chuyển khoản tay rồi xác nhận "đã chi". Tự động hóa sau khi có pháp nhân.
+> `RULE (payout MVP):` Sepay là bank watcher/webhook, không phải disbursement API. MVP: hệ thống tính đúng số tiền + đánh dấu trạng thái, admin chuyển khoản tay rồi xác nhận "đã chi". Tự động hóa sau khi có pháp nhân/provider payout phù hợp.
 
 ---
 
@@ -263,7 +263,7 @@
 | Giai đoạn | Timeline | Nội dung |
 |---|---|---|
 | 1 | Tháng 1–2 | Thiết kế hệ thống, ERD, API contract. Auth (JWT), quản lý user, CRUD event. CI/CD, deploy skeleton lên VPS. |
-| 2 | Tháng 3–4 | Slot booking, trang event public, VNPay/MoMo, **ví in-app + ledger**, email notification. |
+| 2 | Tháng 3–4 | Slot booking, trang event public, Sepay/VietQR, **ví in-app + ledger**, email notification. |
 | 3 | Tháng 5–6 | WebRTC room (Node.js), chat real-time, poll, Q&A queue, raise hand, spotlight. |
 | 4 | Tháng 7–8 | Recording, AI summary (Whisper + GPT), replay, host storefront, follow system. |
 | 5 | Tháng 9–10 | Analytics dashboard, payout flow, admin panel, review system. |

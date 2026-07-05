@@ -77,31 +77,35 @@ public class TransferService {
     public TransferResponse createOffer(String senderPublicId, String bookingPublicId,
                                         CreateTransferRequest request) {
         User sender = userService.getByPublicId(senderPublicId);
-        Booking booking = requireBooking(bookingPublicId);
-
-        if (!booking.getAttendee().getId().equals(sender.getId())) {
-            throw new ForbiddenException("You do not own this ticket");
-        }
-
         User receiver = userService.resolveActiveByEmailOrHandle(request.toUserEmail(), request.toUserHandle());
         if (receiver.getId().equals(sender.getId())) {
             throw new BadRequestException("You cannot transfer a ticket to yourself");
         }
 
         long price = request.price() == null ? 0L : request.price();
-        if (price > booking.getPricePaid()) {
+
+        BookingRepository.BookingLockIds ids = bookingRepository.findLockIdsByPublicId(bookingPublicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+
+        Event event = eventRepository.findByIdForUpdate(ids.getEventId())
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        Booking locked = bookingRepository.findByIdForUpdate(ids.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+
+        if (!locked.getAttendee().getId().equals(sender.getId())) {
+            throw new ForbiddenException("You do not own this ticket");
+        }
+        if (price > locked.getPricePaid()) {
             // R1 — chống phe vé: giá pass ≤ giá gốc (D10).
             throw new BadRequestException("Transfer price cannot exceed the original ticket price");
         }
 
-        // Khóa booking rồi re-check mọi điều kiện trạng thái dưới khóa (R-T1 + R2 + R3).
-        Booking locked = bookingRepository.findByIdForUpdate(booking.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
-        verifyTransferable(locked);
+        // Khóa Event → Booking rồi re-check mọi điều kiện trạng thái dưới khóa (R13 + R-T1).
+        verifyTransferable(locked, event);
         if (transferRepository.existsByBookingIdAndStatus(locked.getId(), TicketTransferStatus.PENDING)) {
             throw new ConflictException("A pending transfer already exists for this ticket");
         }
-        verifyReceiverHasNoBooking(locked.getEvent(), receiver);
+        verifyReceiverHasNoBooking(event, receiver);
 
         TicketTransfer transfer = transferRepository.save(TicketTransfer.builder()
                 .booking(locked)
@@ -123,7 +127,18 @@ public class TransferService {
      */
     @Transactional
     public TransferResponse accept(String receiverPublicId, String transferPublicId) {
-        TicketTransfer transfer = requireTransfer(transferPublicId);
+        TicketTransferRepository.TransferLockIds ids = transferRepository.findLockIdsByPublicId(transferPublicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Transfer not found"));
+
+        // Khóa event trước (thứ tự toàn cục R13) — serialize với EventService.cancel:
+        // không có chuyện sang tên xong mà refund lại chảy về chủ cũ.
+        Event event = eventRepository.findByIdForUpdate(ids.getEventId())
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        Booking booking = bookingRepository.findByIdForUpdate(ids.getBookingId())
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+        TicketTransfer transfer = transferRepository.findById(ids.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Transfer not found"));
+
         if (!transfer.getToUser().getPublicId().equals(receiverPublicId)) {
             throw new ForbiddenException("This transfer was not offered to you");
         }
@@ -133,14 +148,7 @@ public class TransferService {
             throw new BadRequestException("Transfer offer has expired");
         }
 
-        // Khóa event trước (thứ tự toàn cục R13) — serialize với EventService.cancel:
-        // không có chuyện sang tên xong mà refund lại chảy về chủ cũ.
-        Event event = eventRepository.findByIdForUpdate(transfer.getBooking().getEvent().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
-        Booking booking = bookingRepository.findByIdForUpdate(transfer.getBooking().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
-
-        verifyTransferable(booking);
+        verifyTransferable(booking, event);
         if (!booking.getAttendee().getId().equals(transfer.getFromUser().getId())) {
             // Vé đã đổi chủ từ lúc tạo offer (không xảy ra khi R-T1 giữ đúng — defensive).
             throw new ConflictException("Ticket owner has changed since this offer was created");
@@ -268,14 +276,13 @@ public class TransferService {
     // ----- helpers -----
 
     /** R2 + R3/O3 + trạng thái event — dùng chung cho create (dưới khóa booking) và accept. */
-    private void verifyTransferable(Booking booking) {
+    private void verifyTransferable(Booking booking, Event event) {
         if (booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new BadRequestException("Only confirmed tickets can be transferred");
         }
         if (booking.getTransferCount() >= maxHops) {
             throw new BadRequestException("This ticket has reached its transfer limit");
         }
-        Event event = booking.getEvent();
         if (event.getStatus() != EventStatus.PUBLISHED) {
             // Gồm CANCELLED/ENDED/POSTPONED — lịch không chắc chắn thì không cho sang tên.
             throw new BadRequestException("Event is not open for ticket transfer");

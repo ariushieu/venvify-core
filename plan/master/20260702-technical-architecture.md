@@ -151,7 +151,7 @@ interaction) — không nhét vừa dòng nào, tách module `analytics/` cùng 
 | Enum | Giá trị hiện tại | Kế hoạch thêm |
 |---|---|---|
 | TransactionType | COMMISSION, PAYOUT, REFUND, REVERSAL, TICKET_PURCHASE, TICKET_RESALE, TOPUP | +SUSPENSE_HOLD, SUSPENSE_RESOLVE (P2 — đề xuất) |
-| PaymentProvider | INTERNAL, MOMO, VNPAY | +SEPAY (P2) |
+| PaymentProvider | INTERNAL (MOMO/VNPAY chỉ là legacy placeholder từ V1, chưa có flow đang dùng) | +SEPAY (P2) |
 | BookingStatus | ATTENDED, CANCELLED, CONFIRMED, NO_SHOW, REFUNDED, RESERVED | (chưa có kế hoạch) |
 | EscrowStatus | HELD, PAID_OUT, REFUNDED, RELEASED | (chưa) |
 | EventStatus | CANCELLED, DRAFT, ENDED, LIVE, POSTPONED, PUBLISHED | (chưa) |

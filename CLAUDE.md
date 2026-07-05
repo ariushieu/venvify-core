@@ -11,7 +11,7 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
 
 ## Quyết định kiến trúc đã chốt (không tự ý đổi)
 
-- **Backend chính:** Spring Boot 3.x (Spring Security JWT, Spring Data JPA) — nguồn sự thật duy nhất.
+- **Backend chính:** Spring Boot 4.1 + Java 21 (Spring Security JWT, Spring Data JPA) — nguồn sự thật duy nhất.
 - **Realtime:** Node.js + Socket.IO — relay thuần, KHÔNG sở hữu nghiệp vụ. Hỏi Spring để authorize. **Repo riêng `venvify-realtime`** (sibling của repo này); giữ Node đã CHỐT 2026-07-09 (O-MP1). Skeleton (auth + gateway seam) đã dựng; nghiệp vụ room chờ P4.
 - **DB:** MySQL (InnoDB) + Redis. **Không dùng MongoDB / PostgreSQL.**
 - **Auth:** JWT stateless. Không session/cookie thuần.
@@ -97,7 +97,7 @@ public class UserService {
 ### REST API
 - Theo chuẩn RESTful: `GET/POST/PUT/PATCH/DELETE`. Resource path danh từ số nhiều: `/api/v1/users`, `/api/v1/events`.
 - Dùng response wrapper nhất quán cho mọi endpoint.
-- **Pagination bắt buộc:** mọi `GET` trả collection phải nhận `Pageable` và trả `Page<T>`. Không trả list không giới hạn.
+- **Pagination bắt buộc:** mọi `GET` trả collection phải phân trang và chặn `size > 100`. Không trả list không giới hạn.
 ```java
 @GetMapping
 public ResponseEntity<Page<UserResponse>> getAll(Pageable pageable) { ... }
@@ -121,18 +121,18 @@ public ResponseEntity<Page<UserResponse>> getAll(Pageable pageable) { ... }
 ```yaml
 spring:
   datasource:
-    password: ${DB_PASSWORD}
+    password: ${MYSQL_PASSWORD}
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${SECRET_KEY}
 ```
 - Mọi secret trong `.env`; `.env` phải nằm trong `.gitignore`. Mật khẩu hash BCrypt.
 
 ## 5. Quy ước riêng của dự án (từ SPEC.md)
 
-- **2 cột ID mỗi bảng:** `id` BIGINT (nội bộ, KHÔNG expose) + `public_id` VARCHAR/UUID (công khai, dùng cho API/FE). SPEC §5.5.
+- **2 cột ID mỗi bảng:** `id` BIGINT (nội bộ, KHÔNG expose) + `public_id` VARCHAR/UUIDv7 (công khai, dùng cho API/FE). SPEC §5.5.
 - **Phần tiền (SPEC §5.6) — không được sai một xu:**
   - Ledger append-only (số dư = tổng bút toán), KHÔNG cột balance cộng/trừ.
-  - Idempotency cho callback VNPay/MoMo (`transaction_ref` duy nhất).
+  - Idempotency cho webhook Sepay/payment provider (`transaction_ref` duy nhất).
   - `SELECT ... FOR UPDATE` + transaction khi trừ ví.
   - Escrow state machine: `held → released → paid_out` / `refunded`.
 - **Auth giữa 2 backend:** Spring phát JWT, Node verify cùng key + hỏi internal API để authorize vào room (SPEC §5.2).

@@ -20,7 +20,9 @@ import com.venvify.venvifycore.wallet.entity.Transaction;
 import com.venvify.venvifycore.wallet.service.EscrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -111,7 +113,7 @@ public class BookingService {
     @Transactional(readOnly = true)
     public PagedResponse<BookingResponse> listMine(String userPublicId, Pageable pageable) {
         User attendee = requireUser(userPublicId);
-        Page<Booking> page = bookingRepository.findByAttendeeId(attendee.getId(), pageable);
+        Page<Booking> page = bookingRepository.findByAttendeeId(attendee.getId(), safePageable(pageable));
         return PagedResponse.of(page.map(bookingMapper::toResponse));
     }
 
@@ -208,5 +210,15 @@ public class BookingService {
     private Booking requireBooking(String bookingPublicId) {
         return bookingRepository.findByPublicId(bookingPublicId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found"));
+    }
+
+    private static Pageable safePageable(Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged() || pageable.getPageSize() < 1 || pageable.getPageSize() > 100) {
+            throw new BadRequestException("Invalid page or size");
+        }
+        Sort sort = pageable.getSort().isSorted()
+                ? pageable.getSort()
+                : Sort.by(Sort.Direction.DESC, "id");
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 }
