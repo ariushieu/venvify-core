@@ -12,12 +12,12 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này. **Các rule ở 
 ## Quyết định kiến trúc đã chốt (không tự ý đổi)
 
 - **Backend chính:** Spring Boot 3.x (Spring Security JWT, Spring Data JPA) — nguồn sự thật duy nhất.
-- **Realtime:** Node.js + Socket.IO — relay thuần, KHÔNG sở hữu nghiệp vụ. Hỏi Spring để authorize.
+- **Realtime:** Node.js + Socket.IO — relay thuần, KHÔNG sở hữu nghiệp vụ. Hỏi Spring để authorize. **Repo riêng `venvify-realtime`** (sibling của repo này); giữ Node đã CHỐT 2026-07-09 (O-MP1). Skeleton (auth + gateway seam) đã dựng; nghiệp vụ room chờ P4.
 - **DB:** MySQL (InnoDB) + Redis. **Không dùng MongoDB / PostgreSQL.**
 - **Auth:** JWT stateless. Không session/cookie thuần.
 - **Frontend:** React + TailwindCSS (SPA).
 - **Thứ tự build:** hoàn thành toàn bộ core Spring trước → rồi mới sang realtime Node.
-- WebRTC SFU (LiveKit vs mediasoup) còn `OPEN` — hỏi user trước khi code phần này.
+- WebRTC SFU **media** (LiveKit vs mediasoup vs cloud) còn `OPEN` — Node relay KHÔNG tự làm SFU; hỏi user trước khi code phần media, chốt bằng PoC đầu P4.
 
 ---
 
