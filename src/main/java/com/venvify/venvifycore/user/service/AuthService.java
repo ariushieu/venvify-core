@@ -122,7 +122,8 @@ public class AuthService {
         return issueTokens(user);
     }
 
-    @Transactional
+    // Reuse detection phải commit revoke-all trước khi response 401 thoát khỏi method.
+    @Transactional(noRollbackFor = UnauthorizedException.class)
     public AuthResponse refresh(String refreshToken) {
         String hash = sha256(refreshToken);
         RefreshToken stored = refreshTokenRepository.findByTokenHash(hash)
@@ -160,7 +161,8 @@ public class AuthService {
      * Đối chiếu OTP với mã đang hiệu lực mới nhất của user. Đúng → đánh dấu verified và
      * phát luôn cặp token (khỏi bắt đăng nhập lại); sai quá {@link #MAX_OTP_ATTEMPTS} lần → khóa mã.
      */
-    @Transactional
+    // Sai OTP vẫn phải commit attempts/usedAt trước khi response 401 thoát khỏi method.
+    @Transactional(noRollbackFor = UnauthorizedException.class)
     public AuthResponse verifyEmail(String email, String otp) {
         User user = userRepository.findByEmailAndDeletedFalse(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid OTP"));
